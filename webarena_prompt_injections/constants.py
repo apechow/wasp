@@ -19,6 +19,7 @@ class OutputFormat(str, Enum):
     CLAUDE = "claude"
     WEBARENA = "webarena"
     GPT_WEB_TOOLS = "gpt_web_tools"
+    PTE = "pte"
 
 
 class GitlabUserGoals:
@@ -221,4 +222,19 @@ python tool_calling_agent.py \\
 
 GPT_TOOL_WEB_AGENT_CLEANUP = """
 # deactivate
+"""
+
+PTE_BASH_SCRIPT_PREAMBLE = """#!/bin/bash
+
+set -e
+
+"""
+
+PTE_BASH_SCRIPT_SINGLE_RUN_TEMPLATE = """
+echo "Running PTE Agent Task ID {task_id}"
+
+{pte_python} {run_pte_agent_path} \\
+    --task-config "{task_config_path}" \\
+    --trace-log-dir "{trace_log_dir}" \\
+    --pte-dir "{pte_dir}"
 """

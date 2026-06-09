@@ -29,6 +29,8 @@ from constants import (
     GPT_TOOL_WEB_AGENT_PREAMBLE,
     GPT_TOOL_WEB_AGENT_SINGLE_RUN_TEMPLATE,
     GPT_TOOL_WEB_AGENT_CLEANUP,
+    PTE_BASH_SCRIPT_PREAMBLE,
+    PTE_BASH_SCRIPT_SINGLE_RUN_TEMPLATE,
     STARTING_DUMMY_WEBARENA_TASK_INDEX,
     WEBARENA_GITLAB_TASK,
     WEBARENA_REDDIT_TASK,
@@ -121,6 +123,12 @@ class WebArenaPromptInjector:
                 content_of_script_to_run_agent = self._prep_gpt_tool_web_agent_script(
                     webarena_tasks_config, output_dir, model
                 )
+
+            case OutputFormat.PTE:
+                content_of_script_to_run_agent = self._prep_pte_agent_script(
+                    webarena_tasks_config, output_dir
+                )
+
             case _:
                 raise NotImplementedError(f"Invalid output format {output_format}")
 
@@ -262,6 +270,28 @@ class WebArenaPromptInjector:
 
         script_to_run_gpt_web_tool_agent += GPT_TOOL_WEB_AGENT_CLEANUP
         return script_to_run_gpt_web_tool_agent
+
+    def _prep_pte_agent_script(self, webarena_tasks_config, output_dir):
+        trace_log_dir = mkdir_in_output_folder_and_return_absolute_path(
+            output_dir, "agent_logs"
+        )
+        # PTE is a sibling of the wasp/ repo root, two levels up from this file
+        pte_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "PTE"))
+        pte_python = os.path.join(pte_dir, "venv/bin/python")
+        run_pte_agent_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_pte_agent.py")
+
+        script = PTE_BASH_SCRIPT_PREAMBLE
+        for task in webarena_tasks_config:
+            task_config_path = os.path.join(output_dir, f"webarena_tasks/{task['task_id']}.json")
+            script += PTE_BASH_SCRIPT_SINGLE_RUN_TEMPLATE.format(
+                task_id=task["task_id"],
+                pte_python=pte_python,
+                run_pte_agent_path=run_pte_agent_path,
+                task_config_path=task_config_path,
+                trace_log_dir=trace_log_dir,
+                pte_dir=pte_dir,
+            )
+        return script
 
     def _create_attacker_account_or_login(self, editor):
         try:
@@ -610,6 +640,13 @@ class WebArenaPromptInjector:
     help="Where to find the config for prompt injections",
 )
 @click.option(
+    "--only-environment",
+    type=click.Choice(["gitlab", "reddit", "all"], case_sensitive=False),
+    default="all",
+    show_default=True,
+    help="Restrict prompt injection to a single environment (e.g. gitlab only).",
+)
+@click.option(
     "--gitlab-domain",
     default="none",
     show_default=True,
@@ -658,7 +695,7 @@ class WebArenaPromptInjector:
     "--output-format",
     type=str,
     default="webarena",
-    help="Agentic scaffolding to use. Options: webrena (default), gpt_web_tools, claude.",
+    help="Agentic scaffolding to use. Options: webarena (default), gpt_web_tools, claude, pte.",
 )
 @click.option(
     "--skip-environment",
@@ -668,6 +705,7 @@ class WebArenaPromptInjector:
 )
 def main(
     config,
+    only_environment,
     gitlab_domain,
     reddit_domain,
     model,
@@ -678,6 +716,7 @@ def main(
     output_format,
     skip_environment,
 ):
+    only_environment = (only_environment or "all").lower()
 
     if gitlab_domain == "none":  # try to get it from env var
         gitlab_domain = os.environ.get("GITLAB")
@@ -685,6 +724,11 @@ def main(
         reddit_domain = os.environ.get("REDDIT")
 
     experiment_config = load_prompt_injection_config(config)
+    prompt_injection_configs = experiment_config["prompt_injections_setup_config"]
+    if only_environment != "all":
+        prompt_injection_configs = [
+            c for c in prompt_injection_configs if c.get("environment") == only_environment
+        ]
 
     system_prompt = os.path.join(os.getcwd(), system_prompt)
     if output_format == "gpt_web_tools":
@@ -699,12 +743,14 @@ def main(
             model = claude_agent_configs["model"]
             system_prompt = claude_agent_configs["system_prompt"]
 
-    gitlab_editor = GitlabEditor(gitlab_domain)
-    reddit_editor = RedditEditor(reddit_domain)
-    editor_list = [gitlab_editor, reddit_editor]
+    editor_list = []
+    if only_environment in ("all", "gitlab"):
+        editor_list.append(GitlabEditor(gitlab_domain))
+    if only_environment in ("all", "reddit"):
+        editor_list.append(RedditEditor(reddit_domain))
 
     web_arena_prompt_injector = WebArenaPromptInjector(
-        editor_list, experiment_config["prompt_injections_setup_config"]
+        editor_list, prompt_injection_configs
     )
 
     path_to_agent_script, path_to_instantiated_prompt_injection_config = (

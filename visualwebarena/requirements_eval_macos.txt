@@ -1,0 +1,29 @@
+# Packages required by evaluator_final_step.py and its browser_env/evaluation_harness imports.
+# Use this instead of requirements.txt on macOS (avoids nvidia/CUDA packages that don't exist on macOS).
+#
+# Install:
+#   source venv/bin/activate
+#   pip install -r requirements_eval_macos.txt
+#   pip install -e . --no-deps
+#   playwright install chromium
+#   python -c "import ssl; ssl._create_default_https_context = ssl._create_unverified_context; import nltk; nltk.download('punkt_tab'); nltk.download('punkt')"
+
+aiolimiter
+beartype
+click
+evaluate
+gymnasium
+lxml
+matplotlib
+nltk
+numpy
+openai
+pandas
+Pillow
+playwright
+requests
+scikit-image
+text_generation
+tiktoken
+transformers>=4.40.0
+huggingface_hub>=0.23.0

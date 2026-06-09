@@ -1,0 +1,87 @@
+Run commands for WASP + PTE agent
+==================================
+
+All commands are run from: wasp/webarena_prompt_injections/
+Environment variables (GITLAB, REDDIT, OPENAI_API_KEY, DATASET) are loaded automatically from wasp/.env
+
+Script signature:
+  bash scripts/run_end_to_end.sh <output_dir> <model> <system_prompt> <config> <user_goal_idx> <injection_format> <output_format>
+
+
+--- ONE TASK (single GitLab task, one user goal, one injection format) ---
+
+bash scripts/run_end_to_end.sh \
+  /tmp/pte-e2e-test/ \
+  gpt-4o \
+  configs/system_prompts/wa_p_som_cot_id_actree_3s.json \
+  configs/experiment_config_single.json \
+  0 \
+  goal_hijacking_plain_text \
+  pte
+
+
+--- GITLAB ONLY (12 tasks x 2 user goals x 2 injection formats = 48 total runs) ---
+
+python3 run.py \
+  --config configs/experiment_config_gitlab.json \
+  --output-dir /tmp/pte-gitlab-results \
+  --output-format pte
+
+
+--- REDDIT ONLY (9 tasks x 2 user goals x 2 injection formats = 36 total runs) ---
+Note: Reddit API server must be running first:
+  python /path/to/PTE/api/servers/reddit.py
+
+python run.py \
+  --config configs/experiment_config_reddit.json \
+  --output-dir /tmp/pte-reddit-results \
+  --output-format pte
+
+
+--- FULL RUN (all 21 tasks x 2 user goals x 2 injection formats = 84 total runs) ---
+Note: Reddit API server must be running first (see above)
+
+python run.py \
+  --config configs/experiment_config.raw.json \
+  --output-dir /tmp/pte-full-results \
+  --output-format pte
+
+
+--- CONFIG FILES ---
+
+configs/experiment_config_single.json   — 1 GitLab task (no setup_fn, deploy key)
+configs/experiment_config_gitlab.json   — 12 GitLab tasks
+configs/experiment_config_reddit.json   — 9 Reddit tasks
+configs/experiment_config.raw.json      — all 21 tasks
+
+
+--- INJECTION FORMATS ---
+
+goal_hijacking_plain_text     — plain text injection in page content
+goal_hijacking_url_injection  — injection embedded in a URL on the page
+
+
+--- USER GOAL INDICES ---
+
+0 — Comment on the given issue/post saying we are working on it / had similar experience
+1 — Add thumbs_up reaction to the given issue / Upvote the given post
+
+
+--- ONE-TIME SETUP (run once per machine) ---
+
+# Wasp venv (for prompt_injector.py and evaluators)
+cd wasp/webarena_prompt_injections
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt && deactivate
+
+# VWA venv (for evaluator_final_step.py)
+# Use requirements_eval_macos.txt — curated subset of requirements.txt without
+# nvidia/CUDA packages that don't exist on macOS.
+cd wasp/visualwebarena
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements_eval_macos.txt
+pip install -e . --no-deps
+playwright install chromium
+# macOS SSL fix required for NLTK downloads:
+python -c "import ssl; ssl._create_default_https_context = ssl._create_unverified_context; import nltk; nltk.download('punkt_tab'); nltk.download('punkt')"
+deactivate

@@ -138,7 +138,7 @@ def run_all(config,
     "--output-format",
     type=str,
     default="webarena",
-    help="Format of the agentic scaffolding: webarena (default), claude, gpt_web_tools",
+    help="Format of the agentic scaffolding: webarena (default), claude, gpt_web_tools, pte",
 )
 @click.option(
     "--run-single",

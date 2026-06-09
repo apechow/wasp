@@ -1,8 +1,34 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 import os
+import json
+import time
+import uuid
 from playwright.sync_api import TimeoutError
 from .base_environment_editor import BaseWebArenaEditor, WebArenaEditorException
 from urllib.parse import urlparse, urlunparse
+
+# region agent log
+_AGENT_DEBUG_LOG_PATH = "/Users/annabella/Downloads/AIAgent/project/wasp/.cursor/debug.log"
+
+
+def _agent_log(hypothesisId: str, location: str, message: str, data: dict, runId: str):
+    try:
+        payload = {
+            "id": f"log_{int(time.time()*1000)}_{uuid.uuid4().hex[:8]}",
+            "timestamp": int(time.time() * 1000),
+            "sessionId": "debug-session",
+            "runId": runId,
+            "hypothesisId": hypothesisId,
+            "location": location,
+            "message": message,
+            "data": data,
+        }
+        with open(_AGENT_DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload) + "\n")
+    except Exception:
+        pass
+
+# endregion agent log
 
 
 class RedditEditor(BaseWebArenaEditor):
@@ -65,9 +91,36 @@ class RedditEditor(BaseWebArenaEditor):
 
         try:
             self.page.wait_for_selector("input#user_username", timeout=10000)
+            # region agent log
+            _agent_log(
+                hypothesisId="H5",
+                location="webarena_prompt_injections/environment_editors/reddit_editor.py:create_user",
+                message="Registration page loaded; attempting signup",
+                data={
+                    "reddit_domain": self.reddit_domain,
+                    "start_url": start_url,
+                    "username": username,
+                },
+                runId=os.environ.get("AGENT_DEBUG_RUN_ID", "pre-fix"),
+            )
+            # endregion agent log
         except:
             try:
                 # trying to login
+                # region agent log
+                _agent_log(
+                    hypothesisId="H5",
+                    location="webarena_prompt_injections/environment_editors/reddit_editor.py:create_user",
+                    message="Did not find signup fields; attempting login instead",
+                    data={
+                        "reddit_domain": self.reddit_domain,
+                        "start_url": start_url,
+                        "username": username,
+                        "current_url": self.page.url,
+                    },
+                    runId=os.environ.get("AGENT_DEBUG_RUN_ID", "pre-fix"),
+                )
+                # endregion agent log
                 self.login(username, password)
             except:
                 screenshot_path = "/tmp/debug_redditeditor_signup_no_user_field.png"
@@ -89,6 +142,21 @@ class RedditEditor(BaseWebArenaEditor):
             raise WebArenaEditorException(
                 f"Failed to sign up. Screenshot at {screenshot_path}"
             )
+
+        # region agent log
+        _agent_log(
+            hypothesisId="H5",
+            location="webarena_prompt_injections/environment_editors/reddit_editor.py:create_user",
+            message="After signup click (or existing user fallback)",
+            data={
+                "username": username,
+                "current_url": self.page.url,
+                "start_url": start_url,
+                "page_title": (self.page.title() if hasattr(self.page, "title") else None),
+            },
+            runId=os.environ.get("AGENT_DEBUG_RUN_ID", "pre-fix"),
+        )
+        # endregion agent log
 
         if self.page.url.strip("/") == start_url and "This value is already used" in self.page.content():
             print(f"[Reddit Warning!] The account {username} has already been created! Trying to login...")
@@ -137,9 +205,50 @@ class RedditEditor(BaseWebArenaEditor):
         self.page.fill(selector_text_to_type_in, text_to_type_in)
         self.page.select_option(selector_forum, forum)
 
+        # region agent log
+        _agent_log(
+            hypothesisId="H5",
+            location="webarena_prompt_injections/environment_editors/reddit_editor.py:create_post_with_title_and_text",
+            message="About to submit post",
+            data={
+                "reddit_domain": self.reddit_domain,
+                "username": username,
+                "forum": forum,
+                "title_len": len(title_to_type_in or ""),
+                "body_len": len(text_to_type_in or ""),
+                "url_of_action": url_of_action,
+            },
+            runId=os.environ.get("AGENT_DEBUG_RUN_ID", "pre-fix"),
+        )
+        # endregion agent log
+
         self.page.click(selector_of_submit_button)
         self.page.wait_for_load_state("networkidle")
         if self.page.url.strip("/") == url_of_action:
+            # Try to capture server-side error text snippet for debugging.
+            err_snippet = ""
+            try:
+                content_lower = self.page.content().lower()
+                idx = content_lower.find("cannot post")
+                if idx != -1:
+                    err_snippet = self.page.content()[idx : idx + 220]
+            except Exception:
+                err_snippet = ""
+            # region agent log
+            _agent_log(
+                hypothesisId="H5",
+                location="webarena_prompt_injections/environment_editors/reddit_editor.py:create_post_with_title_and_text",
+                message="Post submit did not navigate away (likely blocked by server)",
+                data={
+                    "username": username,
+                    "current_url": self.page.url,
+                    "url_of_action": url_of_action,
+                    "err_snippet_present": bool(err_snippet),
+                    "err_snippet_preview": err_snippet[:120],
+                },
+                runId=os.environ.get("AGENT_DEBUG_RUN_ID", "pre-fix"),
+            )
+            # endregion agent log
             screenshot_path = "/tmp/debug_redditeditor_creat_post.png"
             self.page.screenshot(path=screenshot_path)
             raise WebArenaEditorException(

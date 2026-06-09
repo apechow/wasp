@@ -9,3 +9,6 @@ claude-37-computer-use-demo/.venv/*
 claude-35-computer-use-demo/claude_computer_use_logs/*
 claude-37-computer-use-demo/claude_computer_use_logs/*
 .idea/*
+.env
+.venv
+.cursor

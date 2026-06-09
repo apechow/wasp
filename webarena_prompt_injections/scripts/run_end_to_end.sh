@@ -5,6 +5,15 @@
 
 set -e
 
+# Load environment variables from repo-root .env if present
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+ENV_FILE="$SCRIPT_DIR/../../.env"
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    source "$ENV_FILE"
+    set +a
+fi
+
 export OUTPUT_DIR=${1:-/tmp/computer-use-agent-logs/}
 export MODEL=${2:-gpt-4o}
 export SYSTEM_PROMPT=${3:-configs/system_prompts/wa_p_som_cot_id_actree_3s.json}
@@ -23,7 +32,7 @@ if [ -d "$OUTPUT_DIR" ]; then
 fi
 
 echo "Creating the new OUTPUT_DIR=${OUTPUT_DIR}"
-mkdir "$OUTPUT_DIR"
+mkdir -p "$OUTPUT_DIR"
 
 # ----- cleanup after previous run
 if [ -f "/tmp/run_step_by_step_asr.json" ]; then
@@ -50,7 +59,6 @@ echo "INJECTION_FORMAT: $INJECTION_FORMAT"
 echo "OUTPUT_FORMAT: $OUTPUT_FORMAT"
 
 ##### STEP 1: Inject prompts and create tasks in web environment ######
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 echo "SCRIPT_DIR: $SCRIPT_DIR"
 cd $SCRIPT_DIR/..
 cp $CONFIG_PATH "${OUTPUT_DIR}experiment_config.json"
@@ -72,14 +80,18 @@ deactivate
 
 ##### STEP 2: Run agents on tasks ######
 echo "SCRIPT_DIR: $SCRIPT_DIR"
-cd $SCRIPT_DIR/../../visualwebarena/
-source venv/bin/activate
-chmod -R 777 $OUTPUT_DIR
 AGENT_RUN_SCRIPT="${OUTPUT_DIR}run_agent.sh"
 echo "step 2 | Executing agent script at $AGENT_RUN_SCRIPT"
-bash "$AGENT_RUN_SCRIPT"
-# bash step2_run_agent.sh $OUTPUT_DIR
-deactivate
+chmod -R 777 $OUTPUT_DIR
+if [ "$OUTPUT_FORMAT" = "pte" ]; then
+    bash "$AGENT_RUN_SCRIPT"
+else
+    cd $SCRIPT_DIR/../../visualwebarena/
+    source venv/bin/activate
+    bash "$AGENT_RUN_SCRIPT"
+    # bash step2_run_agent.sh $OUTPUT_DIR
+    deactivate
+fi
 ##### -----------
 
 
@@ -92,9 +104,15 @@ ATTACKER_TASK_DIR="${OUTPUT_DIR}webarena_tasks_attacker/"
 echo "step 3 | OUTPUT_DIR: $OUTPUT_DIR"
 echo "step 3 | OUTPUT_FORMAT: $OUTPUT_FORMAT"
 
+# Map pte format to gpt_web_tools for evaluators (same JSONL format)
+EVAL_FORMAT=$OUTPUT_FORMAT
+if [ "$OUTPUT_FORMAT" = "pte" ]; then
+    EVAL_FORMAT="gpt_web_tools"
+fi
+
 # first report ASR
 source venv/bin/activate
-python evaluator_step_by_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --format $OUTPUT_FORMAT
+python evaluator_step_by_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --format $EVAL_FORMAT
 echo "Done evaluating attack goals step-by-step, above score is ASR!"
 deactivate
 
@@ -103,7 +121,7 @@ cd ../visualwebarena/
 source venv/bin/activate
 bash prepare.sh
 # evaluate attacker task performance (i.e. if final goal of the attacker was achieved)
-python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $ATTACKER_TASK_DIR --format $OUTPUT_FORMAT
+python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $ATTACKER_TASK_DIR --format $EVAL_FORMAT
 echo "Done evaluating attacker goals, above score is ASR!"
 # evaluate user task performance
 python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR
