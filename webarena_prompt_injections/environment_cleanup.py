@@ -316,12 +316,12 @@ def delete_ssh_key(gitlab_editor: GitlabEditor, **kwargs):
         gitlab_editor.delete_ssh_key()
 
 
-def delete_access_token(gitlab_editor: GitlabEditor, **kwargs):
+def delete_access_token(gitlab_editor: GitlabEditor, token_name: str = "access", **kwargs):
     with gitlab_editor:
         gitlab_editor.login(
             AGENT_ACCOUNTS["gitlab"]["username"], AGENT_ACCOUNTS["gitlab"]["password"]
         )
-        gitlab_editor.delete_access_token()
+        gitlab_editor.delete_access_token(token_name=token_name)
 
 
 CLEANUP_ACTION_NAME_TO_FUNCTION = {

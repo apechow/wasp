@@ -31,6 +31,8 @@ from constants import (
     GPT_TOOL_WEB_AGENT_CLEANUP,
     PTE_BASH_SCRIPT_PREAMBLE,
     PTE_BASH_SCRIPT_SINGLE_RUN_TEMPLATE,
+    BEYOND_BROWSING_BASH_SCRIPT_PREAMBLE,
+    BEYOND_BROWSING_BASH_SCRIPT_SINGLE_RUN_TEMPLATE,
     STARTING_DUMMY_WEBARENA_TASK_INDEX,
     WEBARENA_GITLAB_TASK,
     WEBARENA_REDDIT_TASK,
@@ -126,6 +128,11 @@ class WebArenaPromptInjector:
 
             case OutputFormat.PTE:
                 content_of_script_to_run_agent = self._prep_pte_agent_script(
+                    webarena_tasks_config, output_dir
+                )
+
+            case OutputFormat.BEYOND_BROWSING:
+                content_of_script_to_run_agent = self._prep_beyond_browsing_agent_script(
                     webarena_tasks_config, output_dir
                 )
 
@@ -290,6 +297,34 @@ class WebArenaPromptInjector:
                 task_config_path=task_config_path,
                 trace_log_dir=trace_log_dir,
                 pte_dir=pte_dir,
+            )
+        return script
+
+    def _prep_beyond_browsing_agent_script(self, webarena_tasks_config, output_dir):
+        trace_log_dir = mkdir_in_output_folder_and_return_absolute_path(
+            output_dir, "agent_logs"
+        )
+        beyond_browsing_dir = os.path.abspath(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "..", "..", "BeyondBrowsing", "API-Based-Agent"
+            )
+        )
+        beyond_browsing_python = os.path.join(beyond_browsing_dir, ".venv", "bin", "python")
+        run_beyond_browsing_agent_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "run_beyond_browsing_agent.py"
+        )
+
+        script = BEYOND_BROWSING_BASH_SCRIPT_PREAMBLE
+        for task in webarena_tasks_config:
+            task_config_path = os.path.join(output_dir, f"webarena_tasks/{task['task_id']}.json")
+            script += BEYOND_BROWSING_BASH_SCRIPT_SINGLE_RUN_TEMPLATE.format(
+                task_id=task["task_id"],
+                beyond_browsing_python=beyond_browsing_python,
+                run_beyond_browsing_agent_path=run_beyond_browsing_agent_path,
+                task_config_path=task_config_path,
+                trace_log_dir=trace_log_dir,
+                beyond_browsing_dir=beyond_browsing_dir,
             )
         return script
 
@@ -695,7 +730,7 @@ class WebArenaPromptInjector:
     "--output-format",
     type=str,
     default="webarena",
-    help="Agentic scaffolding to use. Options: webarena (default), gpt_web_tools, claude, pte.",
+    help="Agentic scaffolding to use. Options: webarena (default), gpt_web_tools, claude, pte, beyond_browsing.",
 )
 @click.option(
     "--skip-environment",

@@ -43,24 +43,33 @@ def run_single_end_to_end(
     subprocess.run(command, check=True)
 
     # ------- check and save results
-    with open("/tmp/run_step_by_step_asr.json", 'r') as json_file:
-        res_step_by_step = json.load(json_file)
-        if "compromised" in res_step_by_step:
-            results_dict["cnt_intermediate_compromised"] += res_step_by_step["compromised"]
-        if "not_compromised" in res_step_by_step:
-            results_dict["cnt_intermediate_not_compromised"] += res_step_by_step["not_compromised"]
-        if "outright_refusal" in res_step_by_step:
-            results_dict["cnt_intermediate_outright_refusal"] += res_step_by_step["outright_refusal"]
-    
-    with open("/tmp/run_attacker_utility.json", 'r') as json_file:
-        res_attacker_utility = json.load(json_file)
-        results_dict["cnt_end2end_compromised"] += res_attacker_utility["total_scores"]
-        results_dict["cnt_end2end_not_compromised"] += (res_attacker_utility["cnt_tasks"] - res_attacker_utility["total_scores"])
-    
-    with open("/tmp/run_user_utility.json", 'r') as json_file:
-        res_user_utility = json.load(json_file)
-        results_dict["cnt_user_utility"] += res_user_utility["total_scores"]
-        results_dict["cnt_user_total_tasks"] += res_user_utility["cnt_tasks"]
+    try:
+        with open("/tmp/run_step_by_step_asr.json", 'r') as json_file:
+            res_step_by_step = json.load(json_file)
+            if "compromised" in res_step_by_step:
+                results_dict["cnt_intermediate_compromised"] += res_step_by_step["compromised"]
+            if "not_compromised" in res_step_by_step:
+                results_dict["cnt_intermediate_not_compromised"] += res_step_by_step["not_compromised"]
+            if "outright_refusal" in res_step_by_step:
+                results_dict["cnt_intermediate_outright_refusal"] += res_step_by_step["outright_refusal"]
+    except FileNotFoundError:
+        print("WARNING: /tmp/run_step_by_step_asr.json not found — step-by-step ASR metrics skipped")
+
+    try:
+        with open("/tmp/run_attacker_utility.json", 'r') as json_file:
+            res_attacker_utility = json.load(json_file)
+            results_dict["cnt_end2end_compromised"] += res_attacker_utility["total_scores"]
+            results_dict["cnt_end2end_not_compromised"] += (res_attacker_utility["cnt_tasks"] - res_attacker_utility["total_scores"])
+    except FileNotFoundError:
+        print("WARNING: /tmp/run_attacker_utility.json not found — attacker utility metrics skipped")
+
+    try:
+        with open("/tmp/run_user_utility.json", 'r') as json_file:
+            res_user_utility = json.load(json_file)
+            results_dict["cnt_user_utility"] += res_user_utility["total_scores"]
+            results_dict["cnt_user_total_tasks"] += res_user_utility["cnt_tasks"]
+    except FileNotFoundError:
+        print("WARNING: /tmp/run_user_utility.json not found — user utility metrics skipped")
     # -------
 
 
@@ -138,7 +147,7 @@ def run_all(config,
     "--output-format",
     type=str,
     default="webarena",
-    help="Format of the agentic scaffolding: webarena (default), claude, gpt_web_tools, pte",
+    help="Format of the agentic scaffolding: webarena (default), claude, gpt_web_tools, pte, beyond_browsing",
 )
 @click.option(
     "--run-single",

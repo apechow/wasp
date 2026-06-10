@@ -34,7 +34,8 @@ def _build_jsonl_lines(intent: str, plan, outputs: dict) -> list:
     system_msg = {"role": "system", "content": "PTE Agent"}
     user_msg = {"role": "user", "content": intent}
 
-    lines = [[system_msg, user_msg]]
+    messages = [system_msg, user_msg]
+    lines = [list(messages)]
 
     if plan is None:
         return lines
@@ -47,20 +48,17 @@ def _build_jsonl_lines(intent: str, plan, outputs: dict) -> list:
         raw = outputs.get(sid, {})
         observation = json.dumps(raw) if not isinstance(raw, str) else raw
 
-        lines.append([
-            system_msg,
-            user_msg,
-            {"role": "tool", "content": observation},
-            {
-                "role": "assistant",
-                "tool_calls": [{
-                    "function": {
-                        "name": _tool_name(step),
-                        "arguments": json.dumps(_step_args(step)),
-                    }
-                }],
-            },
-        ])
+        messages.append({
+            "role": "assistant",
+            "tool_calls": [{
+                "function": {
+                    "name": _tool_name(step),
+                    "arguments": json.dumps(_step_args(step)),
+                }
+            }],
+        })
+        messages.append({"role": "tool", "content": observation})
+        lines.append(list(messages))
 
     return lines
 

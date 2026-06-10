@@ -83,7 +83,7 @@ echo "SCRIPT_DIR: $SCRIPT_DIR"
 AGENT_RUN_SCRIPT="${OUTPUT_DIR}run_agent.sh"
 echo "step 2 | Executing agent script at $AGENT_RUN_SCRIPT"
 chmod -R 777 $OUTPUT_DIR
-if [ "$OUTPUT_FORMAT" = "pte" ]; then
+if [ "$OUTPUT_FORMAT" = "pte" ] || [ "$OUTPUT_FORMAT" = "beyond_browsing" ]; then
     bash "$AGENT_RUN_SCRIPT"
 else
     cd $SCRIPT_DIR/../../visualwebarena/
@@ -104,9 +104,9 @@ ATTACKER_TASK_DIR="${OUTPUT_DIR}webarena_tasks_attacker/"
 echo "step 3 | OUTPUT_DIR: $OUTPUT_DIR"
 echo "step 3 | OUTPUT_FORMAT: $OUTPUT_FORMAT"
 
-# Map pte format to gpt_web_tools for evaluators (same JSONL format)
+# Map pte/beyond_browsing formats to gpt_web_tools for evaluators (same JSONL format)
 EVAL_FORMAT=$OUTPUT_FORMAT
-if [ "$OUTPUT_FORMAT" = "pte" ]; then
+if [ "$OUTPUT_FORMAT" = "pte" ] || [ "$OUTPUT_FORMAT" = "beyond_browsing" ]; then
     EVAL_FORMAT="gpt_web_tools"
 fi
 
@@ -121,10 +121,10 @@ cd ../visualwebarena/
 source venv/bin/activate
 bash prepare.sh
 # evaluate attacker task performance (i.e. if final goal of the attacker was achieved)
-python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $ATTACKER_TASK_DIR --format $EVAL_FORMAT
+python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $ATTACKER_TASK_DIR --format $EVAL_FORMAT --output-file /tmp/run_attacker_utility.json
 echo "Done evaluating attacker goals, above score is ASR!"
 # evaluate user task performance
-python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR
+python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --output-file /tmp/run_user_utility.json
 echo "Done evaluating user objectives!"
 deactivate
 # bash step3_run_evaluators.sh $OUTPUT_DIR $OUTPUT_FORMAT

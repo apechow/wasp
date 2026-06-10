@@ -1159,7 +1159,7 @@ class GitlabEditor(BaseWebArenaEditor):
                   f"Maybe ssh key is already deleted or do not exist. "
                   f"Screenshot can be found at: {screenshot_path}")
 
-    def delete_access_token(self):
+    def delete_access_token(self, token_name: str = "access"):
         url_of_action = (
             f"{self.gitlab_domain}/-/profile/personal_access_tokens"
         )
@@ -1167,26 +1167,31 @@ class GitlabEditor(BaseWebArenaEditor):
             url_of_action,
             wait_until="networkidle",
         )
-        btn_delete_selector = "a[aria-label='Revoke']"
         confirm_delete_button = "#confirmationModal___BV_modal_footer_ > button.btn.js-modal-action-primary.btn-danger.btn-md.gl-button"
-        while True:
-            try:
-                self.page.wait_for_selector(btn_delete_selector, timeout=3000)
-                button = self.page.query_selector(btn_delete_selector)
-                # Click the button
-                button.click()
-                # Optionally, wait for some condition or delay if needed
-                self.page.wait_for_timeout(1000)  # Wait for 1 second
-                self._wait_for_selector(confirm_delete_button, timeout=3000)
-                self.page.click(confirm_delete_button)
-                self.page.wait_for_timeout(1000)  # Wait for 1 second
-            except Exception as e:
-                screenshot_path = "/tmp/debug_gitlabeditor_delete_access_token.png"
-                self.page.screenshot(path=screenshot_path)
-                print(f"[Warning] No Delete button or other error occurred: {e}. "
-                      f"Maybe access token is already deleted or do not exist. "
-                      f"Screenshot can be found at: {screenshot_path}")
-                break
+        try:
+            # Find the specific row that contains the target token name and revoke only that token
+            rows = self.page.query_selector_all("tr")
+            revoked = False
+            for row in rows:
+                row_text = row.inner_text() or ""
+                if token_name in row_text:
+                    btn = row.query_selector("a[aria-label='Revoke']")
+                    if btn:
+                        btn.click()
+                        self.page.wait_for_timeout(1000)
+                        self._wait_for_selector(confirm_delete_button, timeout=3000)
+                        self.page.click(confirm_delete_button)
+                        self.page.wait_for_timeout(1000)
+                        revoked = True
+                        break
+            if not revoked:
+                print(f"[Warning] No token named '{token_name}' found to revoke.")
+        except Exception as e:
+            screenshot_path = "/tmp/debug_gitlabeditor_delete_access_token.png"
+            self.page.screenshot(path=screenshot_path)
+            print(f"[Warning] Error revoking token '{token_name}': {e}. "
+                  f"Maybe access token is already deleted or does not exist. "
+                  f"Screenshot can be found at: {screenshot_path}")
 
 
 if __name__ == "__main__":

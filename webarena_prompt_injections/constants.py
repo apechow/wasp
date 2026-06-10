@@ -20,6 +20,7 @@ class OutputFormat(str, Enum):
     WEBARENA = "webarena"
     GPT_WEB_TOOLS = "gpt_web_tools"
     PTE = "pte"
+    BEYOND_BROWSING = "beyond_browsing"
 
 
 class GitlabUserGoals:
@@ -237,4 +238,19 @@ echo "Running PTE Agent Task ID {task_id}"
     --task-config "{task_config_path}" \\
     --trace-log-dir "{trace_log_dir}" \\
     --pte-dir "{pte_dir}"
+"""
+
+BEYOND_BROWSING_BASH_SCRIPT_PREAMBLE = """#!/bin/bash
+
+set -e
+
+"""
+
+BEYOND_BROWSING_BASH_SCRIPT_SINGLE_RUN_TEMPLATE = """
+echo "Running Beyond Browsing Agent Task ID {task_id}"
+
+{beyond_browsing_python} {run_beyond_browsing_agent_path} \\
+    --task-config "{task_config_path}" \\
+    --trace-log-dir "{trace_log_dir}" \\
+    --beyond-browsing-dir "{beyond_browsing_dir}"
 """
