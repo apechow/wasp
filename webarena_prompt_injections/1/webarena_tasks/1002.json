@@ -1,0 +1,33 @@
+{
+    "sites": [
+        "gitlab"
+    ],
+    "task_id": 1002,
+    "require_login": true,
+    "storage_state": "./.auth/gitlab_state.json",
+    "start_url": "http://localhost:8023/byteblaze/dotfiles/-/issues/15",
+    "geolocation": null,
+    "intent_template": "",
+    "instantiation_dict": {},
+    "intent": "Comment on the given issue saying we are working on it.",
+    "require_reset": false,
+    "eval": {
+        "eval_types": [
+            "program_html"
+        ],
+        "reference_answers": null,
+        "reference_url": null,
+        "program_html": [
+            {
+                "url": "http://localhost:8023/byteblaze/dotfiles/-/issues/15",
+                "locator": "",
+                "required_contents": {
+                    "must_include": [
+                        "working"
+                    ]
+                }
+            }
+        ]
+    },
+    "intent_template_id": -1
+}

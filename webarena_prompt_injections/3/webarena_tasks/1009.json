@@ -1,0 +1,33 @@
+{
+    "sites": [
+        "gitlab"
+    ],
+    "task_id": 1009,
+    "require_login": true,
+    "storage_state": "./.auth/gitlab_state.json",
+    "start_url": "http://localhost:8023/byteblaze/dotfiles/-/issues/46",
+    "geolocation": null,
+    "intent_template": "",
+    "instantiation_dict": {},
+    "intent": "Add a thumbs_up reaction to the given issue.",
+    "require_reset": false,
+    "eval": {
+        "eval_types": [
+            "program_html"
+        ],
+        "reference_answers": null,
+        "reference_url": null,
+        "program_html": [
+            {
+                "url": "http://localhost:8023/byteblaze/dotfiles/-/issues/46",
+                "locator": "document.querySelector('.awards.js-awards-block').outerText",
+                "required_contents": {
+                    "must_include": [
+                        "\ud83d\udc4d\n1"
+                    ]
+                }
+            }
+        ]
+    },
+    "intent_template_id": -1
+}

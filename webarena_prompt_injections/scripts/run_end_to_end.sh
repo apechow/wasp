@@ -21,6 +21,7 @@ export CONFIG_PATH=${4:-configs/experiment_config.raw.json}
 export USER_GOAL_IDX=${5:-0}
 export INJECTION_FORMAT=${6:-goal_hijacking_plain_text}
 export OUTPUT_FORMAT=${7:-webarena}
+export MULTI_DOCKER_FLAG=${8:-}
 
 if [[ "${OUTPUT_DIR}" != */ ]]; then
     OUTPUT_DIR="${OUTPUT_DIR}/"
@@ -57,6 +58,7 @@ echo "SYSTEM_PROMPT: $SYSTEM_PROMPT"
 echo "USER_GOAL_IDX: $USER_GOAL_IDX"
 echo "INJECTION_FORMAT: $INJECTION_FORMAT"
 echo "OUTPUT_FORMAT: $OUTPUT_FORMAT"
+echo "MULTI_DOCKER_FLAG: $MULTI_DOCKER_FLAG"
 
 ##### STEP 1: Inject prompts and create tasks in web environment ######
 echo "SCRIPT_DIR: $SCRIPT_DIR"
@@ -72,7 +74,8 @@ python prompt_injector.py --config $CONFIG_PATH \
                           --output-dir $OUTPUT_DIR \
                           --user_goal_idx $USER_GOAL_IDX \
                           --injection_format $INJECTION_FORMAT \
-                          --output-format $OUTPUT_FORMAT
+                          --output-format $OUTPUT_FORMAT \
+                          $MULTI_DOCKER_FLAG
 deactivate
 # bash step1_setup_prompt_injections.sh $OUTPUT_DIR $MODEL $SYSTEM_PROMPT $CONFIG_PATH $USER_GOAL_IDX $INJECTION_FORMAT $OUTPUT_FORMAT
 ##### -----------
@@ -83,7 +86,7 @@ echo "SCRIPT_DIR: $SCRIPT_DIR"
 AGENT_RUN_SCRIPT="${OUTPUT_DIR}run_agent.sh"
 echo "step 2 | Executing agent script at $AGENT_RUN_SCRIPT"
 chmod -R 777 $OUTPUT_DIR
-if [ "$OUTPUT_FORMAT" = "pte" ] || [ "$OUTPUT_FORMAT" = "beyond_browsing" ]; then
+if [ "$OUTPUT_FORMAT" = "pte" ] || [ "$OUTPUT_FORMAT" = "beyond_browsing" ] || [ "$OUTPUT_FORMAT" = "react_api_web" ]; then
     bash "$AGENT_RUN_SCRIPT"
 else
     cd $SCRIPT_DIR/../../visualwebarena/
@@ -106,7 +109,7 @@ echo "step 3 | OUTPUT_FORMAT: $OUTPUT_FORMAT"
 
 # Map pte/beyond_browsing formats to gpt_web_tools for evaluators (same JSONL format)
 EVAL_FORMAT=$OUTPUT_FORMAT
-if [ "$OUTPUT_FORMAT" = "pte" ] || [ "$OUTPUT_FORMAT" = "beyond_browsing" ]; then
+if [ "$OUTPUT_FORMAT" = "pte" ] || [ "$OUTPUT_FORMAT" = "beyond_browsing" ] || [ "$OUTPUT_FORMAT" = "react_api_web" ]; then
     EVAL_FORMAT="gpt_web_tools"
 fi
 
@@ -138,7 +141,7 @@ PROMPT_INJECTION_CONFIG="${OUTPUT_DIR}instantiated_prompt_injections_config.json
 echo "step 4 | OUTPUT_DIR: $OUTPUT_DIR"
 echo "step 4 | PROMPT_INJECTION_CONFIG: $PROMPT_INJECTION_CONFIG"
 source venv/bin/activate
-python environment_cleanup.py --prompt-injection-config-path "$PROMPT_INJECTION_CONFIG" --gitlab-domain $GITLAB --reddit-domain $REDDIT
+python environment_cleanup.py --prompt-injection-config-path "$PROMPT_INJECTION_CONFIG" --gitlab-domain $GITLAB --reddit-domain $REDDIT $MULTI_DOCKER_FLAG --worker-ids-dir "${OUTPUT_DIR}worker_ids/"
 deactivate
 # bash step4_cleanup.sh $OUTPUT_DIR
 ##### -----------

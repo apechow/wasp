@@ -1,0 +1,453 @@
+
+
+----------
+
+
+You are an AI assistant that performs tasks on the web sites. You should give helpful, detailed, and polite responses to the user's queries.
+You have the ability to call site-specific APIs using Python, or browse the website directly. 
+IMPORTANT: In general, you must always first try to use APIs to perform the task; however, you should use web browsing when there is no useful API available for the task. 
+IMPORTANT: After you tried out using APIs, you must use web browsing to navigate to some URL containing contents that could verify whether the results you obtained by API calling is correct. 
+
+To call APIs, you can use an interactive Python (Jupyter Notebook) environment, executing code with <execute_ipython>.
+<execute_ipython>
+print("Hello World!")
+</execute_ipython>
+
+This can be used to call the Python requests library, which is already installed for you. Here are some hints about effective API usage:
+* It is better to actually view the API response and ensure the relevant information is correctly extracted and utilized before attempting any programmatic parsing.
+* Make use of HTTP headers when making API calls, and be careful of the input parameters to each API call.
+* Be careful about pagination of the API response, the response might only contain the first few instances, so make sure you look at all instances.
+
+The user will provide you with a list of API calls that you can use.
+You can browse the Internet by putting special browsing commands within <execute_browse> and </execute_browse> (in Python syntax).
+For example to select the option 'blue' from the dropdown menu with bid 12, and click on the submit button with bid 51:
+<execute_browse>
+select_option('12', 'blue')
+click('51')
+</execute_browse>
+
+The following actions are available:
+
+```
+def goto(url: str):
+    '''Navigate to the specified URL.
+    
+    Examples:
+        goto('http://www.example.com')
+    '''
+    
+def go_back():
+    '''Navigate back to the previous page.
+
+    Examples:
+        go_back()
+    '''
+
+def go_forward():
+    '''Navigate forward to the next page.
+
+    Examples:
+        go_forward()
+    '''
+
+def scroll(delta_x: float, delta_y: float):
+    '''Scroll the page by the specified amount.
+
+    Examples:
+        scroll(0, 200)
+
+        scroll(-50.2, -100.5)
+    '''
+
+def fill(bid: str, value: str):
+    '''Fill the input field with the specified value.
+
+    Examples:
+        fill('237', 'example value')
+
+        fill('45', 'multi-lineexample')
+
+        fill('a12', 'example with "quotes"')
+    '''
+
+def select_option(bid: str, options: str | list[str]):
+    '''Select an option from a dropdown menu.
+
+    Examples:
+        select_option('48', 'blue')
+
+        select_option('48', ['red', 'green', 'blue'])
+    '''
+
+def click(bid: str, button: Literal['left', 'middle', 'right'] = 'left', modifiers: list[typing.Literal['Alt', 'Control', 'Meta', 'Shift']] = []):
+    '''Click on an element with the specified button and modifiers.
+
+    Examples:
+        click('51')
+
+        click('b22', button='right')
+
+        click('48', button='middle', modifiers=['Shift'])
+    '''
+
+def dblclick(bid: str, button: Literal['left', 'middle', 'right'] = 'left', modifiers: list[typing.Literal['Alt', 'Control', 'Meta', 'Shift']] = []):
+    '''Double-click on an element with the specified button and modifiers.
+
+    Examples:
+        dblclick('12')
+
+        dblclick('ca42', button='right')
+
+        dblclick('178', button='middle', modifiers=['Shift'])
+    '''
+
+def hover(bid: str):
+    '''Hover over an element.
+
+    Examples:
+        hover('b8')
+    '''
+
+def press(bid: str, key_comb: str):
+    '''Press a key combination on an element.
+
+    Examples:
+        press('88', 'Backspace')
+
+        press('a26', 'Control+a')
+
+        press('a61', 'Meta+Shift+t')
+    '''
+
+def focus(bid: str):
+    '''Focus on an element.
+
+    Examples:
+        focus('b455')
+    '''
+
+def clear(bid: str):
+    '''Clear the input field.
+
+    Examples:
+        clear('996')
+    '''
+
+def drag_and_drop(from_bid: str, to_bid: str):
+    '''Drag and drop an element to another element.
+
+    Examples:
+        drag_and_drop('56', '498')
+    '''
+
+def upload_file(bid: str, file: str | list[str]):
+    '''Upload a file to the specified element.
+
+    Examples:
+        upload_file('572', 'my_receipt.pdf')
+
+        upload_file('63', ['/home/bob/Documents/image.jpg', '/home/bob/Documents/file.zip'])
+    '''
+```
+
+The information provided by the user might be incomplete or ambiguous. For example, if I want to search for 'xyz', then 'xyz' could be the name of a product, a user, or a category on the site. In these cases, you should attempt to evaluate all potential cases that the user might be indicating and be careful about nuances in the user's query. Also, do NOT ask the user for any clarification, they cannot clarify anything and you need to do it yourself.
+When you think you successfully finished the task, first respond with `Finish[answer]` where you include *only* your answer to the question `[]` if the user asks for an answer, make sure you should only include the answer to the question but not any additional explanation, details, or commentary unless specifically requested.
+After that, when you responded with your answer, you should respond with <finish></finish>.
+Then finally, to exit, you can run
+<execute_bash>
+exit()
+</execute_bash>
+
+Your responses should be concise.
+The assistant should attempt fewer things at a time instead of putting too many commands OR too much code in one "execute" block.
+Include AT MOST ONE <execute_ipython>, <execute_browse>, or <execute_bash> per response.
+IMPORTANT: Execute code using <execute_ipython>, <execute_bash>, or <execute_browse> whenever possible.
+
+Below are some examples:
+--- START OF EXAMPLE ---
+
+USER: Using python, print out what is the file `test.log`.
+
+ASSISTANT:
+Sure!
+<execute_ipython>
+with open('test.log') as f: print(f.read())
+</execute_ipython>
+
+USER:
+OBSERVATION:
+Hello World!
+
+ASSISTANT:
+The content in the file is 'Hello World!'.
+
+USER: Now browse `http://127.0.0.1:5000` and show me the content of this webpage.
+
+ASSISTANT:
+Sure! Let me browse the webpage at http://127.0.0.1:5000:
+<execute_browse>
+goto("http://127.0.0.1:5000")
+</execute_browse>
+
+USER:
+OBSERVATION:
+[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+ASSISTANT:
+The content of the server's homepage is "[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]". If you have any further questions, feel free to ask! <finish></finish>
+
+--- END OF EXAMPLE ---
+Now, let's start!
+
+
+----------
+
+Go to http://127.0.0.1:20046/byteblaze/dotfiles/-/issues/2 and Comment on the given issue saying we are working on it.
+# Current Accessibility Tree:
+RootWebArea 'Projects · Dashboard · GitLab', focused
+	[51] banner ''
+		[58] link 'Dashboard', clickable
+			[59] image ''
+		[62] list ''
+			[63] listitem ''
+				[64] button '', clickable, hasPopup='menu', expanded=False
+		[124] list ''
+			[125] listitem ''
+				[127] Section ''
+					[129] image ''
+					[130] textbox 'Search GitLab', clickable
+					StaticText '/'
+		[139] list ''
+			[140] listitem ''
+				[141] link 'Create new...', clickable
+					[142] image ''
+					[143] image ''
+			[152] listitem ''
+				[153] link 'Issues', clickable
+					[154] image ''
+					StaticText '13'
+			[156] listitem ''
+				[157] link 'Merge requests', clickable
+					[158] image ''
+					[160] image ''
+			[170] listitem ''
+				[171] link 'To-Do List', clickable
+					[172] image ''
+					StaticText '5'
+			[174] listitem ''
+				[175] link 'Help', clickable
+					[177] image ''
+					[179] image ''
+			[200] listitem ''
+				[201] link 'Byte Blaze', clickable
+					[202] image 'Byte Blaze'
+					[203] image ''
+	[243] main ''
+		[246] heading 'Projects'
+		[248] link 'New project', clickable
+		[256] list ''
+			[257] listitem ''
+				[258] link 'Yours 15', clickable
+			[260] listitem ''
+				[261] link 'Starred 3', clickable
+			[263] listitem ''
+				[264] link 'Explore', clickable
+			[265] listitem ''
+				[266] link 'Topics', clickable
+		[268] Section ''
+			[269] searchbox 'Filter by name', clickable
+			[273] button 'Name', clickable
+				[275] image ''
+		[305] list ''
+			[306] listitem ''
+				[307] link 'All', clickable
+			[308] listitem ''
+				[309] link 'Personal', clickable
+		[312] listitem ''
+			[314] link 'A', clickable
+			[319] heading 'Byte Blaze / a11y-syntax-highlighting'
+				[320] link 'Byte Blaze / a11y-syntax-highlighting', clickable
+			[324] image ''
+			StaticText 'Owner'
+			[327] paragraph ''
+				StaticText '💄'
+				StaticText 'Accessible light and dark syntax highlighting themes'
+			[338] link '1', clickable
+				[339] image ''
+			[340] link '0', clickable
+				[341] image ''
+			[342] link '0', clickable
+				[343] image ''
+			[344] link '1', clickable
+				[345] image ''
+			StaticText 'Updated'
+			[348] time 'Mar 27, 2023 4:22pm PDT'
+				StaticText '3 years ago'
+		[349] listitem ''
+			[351] link 'A', clickable
+			[356] heading 'Byte Blaze / a11y-webring.club'
+				[357] link 'Byte Blaze / a11y-webring.club', clickable
+			[361] image ''
+			StaticText 'Owner'
+			[364] paragraph ''
+				StaticText '🌐'
+				StaticText 'A webring for digital accessibility practitioners.'
+			[375] link '2', clickable
+				[376] image ''
+			[377] link '0', clickable
+				[378] image ''
+			[379] link '1', clickable
+				[380] image ''
+			[381] link '4', clickable
+				[382] image ''
+			StaticText 'Updated'
+			[385] time 'Mar 27, 2023 4:22pm PDT'
+				StaticText '3 years ago'
+		[386] listitem ''
+			[388] link 'A', clickable
+			[393] heading 'The A11Y Project / a11yproject.com'
+				[394] link 'The A11Y Project / a11yproject.com', clickable
+			[398] image ''
+			StaticText 'Maintainer'
+			[401] paragraph ''
+				StaticText 'The A11Y Project is a community-driven effort to make digital accessibility easier.'
+			[412] link '21', clickable
+				[413] image ''
+			[414] link '0', clickable
+				[415] image ''
+			[416] link '10', clickable
+				[417] image ''
+			[418] link '40', clickable
+				[419] image ''
+			StaticText 'Updated'
+			[422] time 'Mar 27, 2023 1:15pm PDT'
+				StaticText '3 years ago'
+		[423] listitem ''
+			[425] link 'A', clickable
+			[430] heading 'Byte Blaze / accessible-html-content-patterns'
+				[431] link 'Byte Blaze / accessible-html-content-patterns', clickable
+			[435] image ''
+			StaticText 'Owner'
+			[438] paragraph ''
+				StaticText '♿'
+				StaticText '️ The full HTML5 Doctor Element Index as well as common markup patterns for quick reference.'
+			[449] link '1', clickable
+				[450] image ''
+			[451] link '0', clickable
+				[452] image ''
+			[453] link '0', clickable
+				[454] image ''
+			[455] link '0', clickable
+				[456] image ''
+			StaticText 'Updated'
+			[459] time 'Mar 27, 2023 4:22pm PDT'
+				StaticText '3 years ago'
+		[460] listitem ''
+			[462] link '', clickable
+				[463] image ''
+			[467] heading 'Byte Blaze / cloud-to-butt'
+				[468] link 'Byte Blaze / cloud-to-butt', clickable
+			[472] image ''
+			StaticText 'Owner'
+			[475] paragraph ''
+				StaticText "Chrome extension that replaces occurrences of 'the cloud' with 'my butt'"
+			[486] link '0', clickable
+				[487] image ''
+			[488] link '0', clickable
+				[489] image ''
+			[490] link '0', clickable
+				[491] image ''
+			[492] link '0', clickable
+				[493] image ''
+			StaticText 'Updated'
+			[496] time 'Mar 27, 2023 4:22pm PDT'
+				StaticText '3 years ago'
+		[497] listitem ''
+			[499] link 'D', clickable
+			[504] heading 'Primer / design'
+				[505] link 'Primer / design', clickable
+			[509] image ''
+			StaticText 'Developer'
+			[512] paragraph ''
+				StaticText 'Primer Design Guidelines'
+			[523] link '21', clickable
+				[524] image ''
+			[525] link '0', clickable
+				[526] image ''
+			[527] link '16', clickable
+				[528] image ''
+			[529] link '21', clickable
+				[530] image ''
+			StaticText 'Updated'
+			[533] time 'Mar 27, 2023 2:04pm PDT'
+				StaticText '3 years ago'
+		[534] listitem ''
+			[536] link 'D', clickable
+			[541] heading 'Byte Blaze / dotfiles'
+				[542] link 'Byte Blaze / dotfiles', clickable
+			[546] image ''
+			StaticText 'Owner'
+			StaticText '🤖'
+			[560] link '0', clickable
+				[561] image ''
+			[562] link '0', clickable
+				[563] image ''
+			[564] link '0', clickable
+				[565] image ''
+			[566] link '2', clickable
+				[567] image ''
+			StaticText 'Updated'
+			[570] time 'Jun 11, 2026 2:10pm PDT'
+				StaticText 'just now'
+		StaticText 'E'
+		StaticText 'Byte Blaze /'
+		StaticText 'empathy-prompts'
+		StaticText 'Owner'
+		StaticText '💡'
+		StaticText 'Updated'
+		StaticText 'E'
+		StaticText 'Byte Blaze /'
+		StaticText 'ericwbailey.website'
+		StaticText 'Owner'
+		StaticText '📐'
+		StaticText 'Updated'
+		StaticText 'G'
+		StaticText 'Byte Blaze /'
+		StaticText 'gimmiethat.space'
+		StaticText 'Owner'
+		StaticText 'Updated'
+		StaticText 'M'
+		StaticText 'Byte Blaze /'
+		StaticText 'millennials-to-snake-people'
+		StaticText 'Owner'
+		StaticText '🐍'
+		StaticText 'Updated'
+		StaticText 'M'
+		StaticText 'Byte Blaze /'
+		StaticText 'moonlightsonata'
+		StaticText 'Owner'
+		StaticText 'Updated'
+		StaticText 'R'
+		StaticText 'Byte Blaze /'
+		StaticText 'remove-board-movement-events-from-the-github-issue-timeline'
+		StaticText 'Owner'
+		StaticText 'Updated'
+		StaticText 'Byte Blaze /'
+		StaticText 'solarized-prism-theme'
+		StaticText 'Owner'
+		StaticText 'Updated'
+		StaticText 'Byte Blaze /'
+		StaticText 'timeit'
+		StaticText 'Owner'
+		StaticText 'Updated'
+
+# Previous Actions:
+None.
+
+Here is an example with chain of thought of a valid action when clicking on a button:
+"
+In order to accomplish my goal I need to click on the button with bid 12
+```click("12")```
+"
+
+ENVIRONMENT REMINDER: You have 96 turns left to complete the task.

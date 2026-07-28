@@ -1,0 +1,5 @@
+To comment on the issue, I need to navigate to the specified URL and locate the comment section. Let's start by going to the URL provided.
+
+<execute_browse>
+goto("http://127.0.0.1:20046/byteblaze/dotfiles/-/issues/2")
+

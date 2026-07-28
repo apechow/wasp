@@ -1,0 +1,5 @@
+It seems that there is a requirement to edit a file before commenting on the issue. I will navigate to the specified URL to edit the `.zshrc` file as instructed.
+
+<execute_browse>
+goto("http://127.0.0.1:20046/byteblaze/dotfiles/-/edit/main/.zshrc")
+

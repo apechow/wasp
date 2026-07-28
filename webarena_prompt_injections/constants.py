@@ -21,6 +21,7 @@ class OutputFormat(str, Enum):
     GPT_WEB_TOOLS = "gpt_web_tools"
     PTE = "pte"
     BEYOND_BROWSING = "beyond_browsing"
+    REACT_API_WEB = "react_api_web"
 
 
 class GitlabUserGoals:
@@ -253,4 +254,96 @@ echo "Running Beyond Browsing Agent Task ID {task_id}"
     --task-config "{task_config_path}" \\
     --trace-log-dir "{trace_log_dir}" \\
     --beyond-browsing-dir "{beyond_browsing_dir}"
+"""
+
+# Parallel variants: tasks run as background processes (&) then collected with wait.
+# No set -e — it doesn't propagate to background processes and confuses the wait loop.
+
+PTE_BASH_SCRIPT_PREAMBLE_PARALLEL = """#!/bin/bash
+
+MAX_JOBS={num_workers}
+pids=()
+
+wait_if_full() {{
+    while [ "${{#pids[@]}}" -ge "$MAX_JOBS" ]; do
+        new_pids=()
+        for pid in "${{pids[@]}}"; do
+            kill -0 "$pid" 2>/dev/null && new_pids+=("$pid")
+        done
+        pids=("${{new_pids[@]}}")
+        [ "${{#pids[@]}}" -ge "$MAX_JOBS" ] && sleep 2
+    done
+}}
+"""
+
+PTE_BASH_SCRIPT_SINGLE_RUN_TEMPLATE_PARALLEL = """
+echo "Running Task ID {task_id} (multi-docker, PTE)"
+wait_if_full
+
+{wasp_python} {run_task_multi_docker_path} \\
+    --pi-context-path "{pi_context_path}" \\
+    --output-format pte \\
+    --trace-log-dir "{trace_log_dir}" \\
+    --pte-dir "{pte_dir}" &
+pids+=($!)
+"""
+
+PTE_BASH_SCRIPT_POSTAMBLE_PARALLEL = """
+echo "Waiting for all PTE tasks to finish..."
+for pid in "${pids[@]}"; do
+    wait "$pid" || true
+done
+echo "All PTE tasks done."
+"""
+
+BEYOND_BROWSING_BASH_SCRIPT_PREAMBLE_PARALLEL = """#!/bin/bash
+
+MAX_JOBS={num_workers}
+pids=()
+
+wait_if_full() {{
+    while [ "${{#pids[@]}}" -ge "$MAX_JOBS" ]; do
+        new_pids=()
+        for pid in "${{pids[@]}}"; do
+            kill -0 "$pid" 2>/dev/null && new_pids+=("$pid")
+        done
+        pids=("${{new_pids[@]}}")
+        [ "${{#pids[@]}}" -ge "$MAX_JOBS" ] && sleep 2
+    done
+}}
+"""
+
+BEYOND_BROWSING_BASH_SCRIPT_SINGLE_RUN_TEMPLATE_PARALLEL = """
+echo "Running Task ID {task_id} (multi-docker, Beyond Browsing)"
+wait_if_full
+
+{beyond_browsing_python} {run_task_multi_docker_path} \\
+    --pi-context-path "{pi_context_path}" \\
+    --output-format beyond_browsing \\
+    --trace-log-dir "{trace_log_dir}" \\
+    --beyond-browsing-dir "{beyond_browsing_dir}" &
+pids+=($!)
+"""
+
+BEYOND_BROWSING_BASH_SCRIPT_POSTAMBLE_PARALLEL = """
+echo "Waiting for all Beyond Browsing tasks to finish..."
+for pid in "${pids[@]}"; do
+    wait "$pid" || true
+done
+echo "All Beyond Browsing tasks done."
+"""
+
+REACT_API_WEB_BASH_SCRIPT_PREAMBLE = """#!/bin/bash
+
+set -e
+
+"""
+
+REACT_API_WEB_BASH_SCRIPT_SINGLE_RUN_TEMPLATE = """
+echo "Running ReactAPIWeb Agent Task ID {task_id}"
+
+{pte_python} {run_react_api_web_agent_path} \\
+    --task-config "{task_config_path}" \\
+    --trace-log-dir "{trace_log_dir}" \\
+    --pte-dir "{pte_dir}"
 """

@@ -31,8 +31,16 @@ from constants import (
     GPT_TOOL_WEB_AGENT_CLEANUP,
     PTE_BASH_SCRIPT_PREAMBLE,
     PTE_BASH_SCRIPT_SINGLE_RUN_TEMPLATE,
+    PTE_BASH_SCRIPT_PREAMBLE_PARALLEL,
+    PTE_BASH_SCRIPT_SINGLE_RUN_TEMPLATE_PARALLEL,
+    PTE_BASH_SCRIPT_POSTAMBLE_PARALLEL,
     BEYOND_BROWSING_BASH_SCRIPT_PREAMBLE,
     BEYOND_BROWSING_BASH_SCRIPT_SINGLE_RUN_TEMPLATE,
+    BEYOND_BROWSING_BASH_SCRIPT_PREAMBLE_PARALLEL,
+    BEYOND_BROWSING_BASH_SCRIPT_SINGLE_RUN_TEMPLATE_PARALLEL,
+    BEYOND_BROWSING_BASH_SCRIPT_POSTAMBLE_PARALLEL,
+    REACT_API_WEB_BASH_SCRIPT_PREAMBLE,
+    REACT_API_WEB_BASH_SCRIPT_SINGLE_RUN_TEMPLATE,
     STARTING_DUMMY_WEBARENA_TASK_INDEX,
     WEBARENA_GITLAB_TASK,
     WEBARENA_REDDIT_TASK,
@@ -71,7 +79,16 @@ class WebArenaPromptInjector:
         system_prompt: str,
         user_goal_idx: int,
         model: str,
+        multi_docker: bool = False,
     ):
+        if multi_docker and output_format in (OutputFormat.PTE, OutputFormat.BEYOND_BROWSING):
+            return self._inject_in_environment_multi_docker(
+                injection_format=injection_format,
+                output_dir=output_dir,
+                output_format=output_format,
+                user_goal_idx=user_goal_idx,
+            )
+
         if not skip_environment:
             self._prepare_environment()  # this calls setup function needed to prepare websites
 
@@ -133,6 +150,11 @@ class WebArenaPromptInjector:
 
             case OutputFormat.BEYOND_BROWSING:
                 content_of_script_to_run_agent = self._prep_beyond_browsing_agent_script(
+                    webarena_tasks_config, output_dir
+                )
+
+            case OutputFormat.REACT_API_WEB:
+                content_of_script_to_run_agent = self._prep_react_api_web_agent_script(
                     webarena_tasks_config, output_dir
                 )
 
@@ -300,6 +322,27 @@ class WebArenaPromptInjector:
             )
         return script
 
+    def _prep_pte_agent_script_multi_docker(self, output_dir, num_workers):
+        trace_log_dir = mkdir_in_output_folder_and_return_absolute_path(output_dir, "agent_logs")
+        pte_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "PTE"))
+        wasp_python = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv/bin/python")
+        run_task_multi_docker_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_task_multi_docker.py")
+
+        script = PTE_BASH_SCRIPT_PREAMBLE_PARALLEL.format(num_workers=num_workers)
+        for i in range(len(self.prompt_injection_configs)):
+            task_id = STARTING_DUMMY_WEBARENA_TASK_INDEX + i
+            pi_context_path = os.path.join(output_dir, f"pi_task_contexts/{task_id}.json")
+            script += PTE_BASH_SCRIPT_SINGLE_RUN_TEMPLATE_PARALLEL.format(
+                task_id=task_id,
+                wasp_python=wasp_python,
+                run_task_multi_docker_path=run_task_multi_docker_path,
+                pi_context_path=pi_context_path,
+                trace_log_dir=trace_log_dir,
+                pte_dir=pte_dir,
+            )
+        script += PTE_BASH_SCRIPT_POSTAMBLE_PARALLEL
+        return script
+
     def _prep_beyond_browsing_agent_script(self, webarena_tasks_config, output_dir):
         trace_log_dir = mkdir_in_output_folder_and_return_absolute_path(
             output_dir, "agent_logs"
@@ -326,6 +369,55 @@ class WebArenaPromptInjector:
                 trace_log_dir=trace_log_dir,
                 beyond_browsing_dir=beyond_browsing_dir,
             )
+        return script
+
+    def _prep_react_api_web_agent_script(self, webarena_tasks_config, output_dir):
+        trace_log_dir = mkdir_in_output_folder_and_return_absolute_path(
+            output_dir, "agent_logs"
+        )
+        pte_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "PTE"))
+        pte_python = os.path.join(pte_dir, "venv/bin/python")
+        run_react_api_web_agent_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "run_react_api_web_agent.py"
+        )
+
+        script = REACT_API_WEB_BASH_SCRIPT_PREAMBLE
+        for task in webarena_tasks_config:
+            task_config_path = os.path.join(output_dir, f"webarena_tasks/{task['task_id']}.json")
+            script += REACT_API_WEB_BASH_SCRIPT_SINGLE_RUN_TEMPLATE.format(
+                task_id=task["task_id"],
+                pte_python=pte_python,
+                run_react_api_web_agent_path=run_react_api_web_agent_path,
+                task_config_path=task_config_path,
+                trace_log_dir=trace_log_dir,
+                pte_dir=pte_dir,
+            )
+        return script
+
+    def _prep_beyond_browsing_agent_script_multi_docker(self, output_dir, num_workers):
+        trace_log_dir = mkdir_in_output_folder_and_return_absolute_path(output_dir, "agent_logs")
+        beyond_browsing_dir = os.path.abspath(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "..", "..", "BeyondBrowsing", "API-Based-Agent"
+            )
+        )
+        beyond_browsing_python = os.path.join(beyond_browsing_dir, ".venv", "bin", "python")
+        run_task_multi_docker_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_task_multi_docker.py")
+
+        script = BEYOND_BROWSING_BASH_SCRIPT_PREAMBLE_PARALLEL.format(num_workers=num_workers)
+        for i in range(len(self.prompt_injection_configs)):
+            task_id = STARTING_DUMMY_WEBARENA_TASK_INDEX + i
+            pi_context_path = os.path.join(output_dir, f"pi_task_contexts/{task_id}.json")
+            script += BEYOND_BROWSING_BASH_SCRIPT_SINGLE_RUN_TEMPLATE_PARALLEL.format(
+                task_id=task_id,
+                beyond_browsing_python=beyond_browsing_python,
+                run_task_multi_docker_path=run_task_multi_docker_path,
+                pi_context_path=pi_context_path,
+                trace_log_dir=trace_log_dir,
+                beyond_browsing_dir=beyond_browsing_dir,
+            )
+        script += BEYOND_BROWSING_BASH_SCRIPT_POSTAMBLE_PARALLEL
         return script
 
     def _create_attacker_account_or_login(self, editor):
@@ -666,6 +758,162 @@ class WebArenaPromptInjector:
 
         return tasks_with_prompt_injections, tasks_from_attacker
 
+    def _inject_in_environment_multi_docker(
+        self,
+        injection_format: str,
+        output_dir: str,
+        output_format: OutputFormat,
+        user_goal_idx: int,
+    ):
+        """Multi-docker path: skip static injection; write per-task pi_context files and a parallel run_agent.sh."""
+        webarena_tasks_dir = mkdir_in_output_folder_and_return_absolute_path(output_dir, "webarena_tasks")
+        webarena_attacker_tasks_dir = mkdir_in_output_folder_and_return_absolute_path(output_dir, "webarena_tasks_attacker")
+        pi_task_contexts_dir = mkdir_in_output_folder_and_return_absolute_path(output_dir, "pi_task_contexts")
+
+        for i, pi_config in enumerate(self.prompt_injection_configs):
+            task_id = STARTING_DUMMY_WEBARENA_TASK_INDEX + i
+            ctx = {
+                "pi_config": copy.deepcopy(pi_config),
+                "user_goal_idx": user_goal_idx,
+                "injection_format": injection_format,
+                "task_id": task_id,
+                "task_dir": webarena_tasks_dir,
+                "attacker_task_dir": webarena_attacker_tasks_dir,
+            }
+            write_json(ctx, os.path.join(pi_task_contexts_dir, f"{task_id}.json"))
+
+        bb_eval_dir = os.path.abspath(os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..", "..", "BeyondBrowsing", "API-Based-Agent", "evaluation", "webarena"
+        ))
+        import sys
+        if bb_eval_dir not in sys.path:
+            sys.path.append(bb_eval_dir)
+        from worker_pool.workers import num_workers
+        n_workers = num_workers()
+
+        if output_format == OutputFormat.PTE:
+            content = self._prep_pte_agent_script_multi_docker(output_dir, n_workers)
+        else:
+            content = self._prep_beyond_browsing_agent_script_multi_docker(output_dir, n_workers)
+
+        path_to_agent_script = os.path.join(output_dir, "run_agent.sh")
+        write_bash_script(path_to_agent_script, content)
+
+        path_to_instantiated_prompt_injection_config = os.path.join(
+            output_dir, "instantiated_prompt_injections_config.json"
+        )
+        write_json(self.prompt_injection_configs, path_to_instantiated_prompt_injection_config)
+
+        return path_to_agent_script, path_to_instantiated_prompt_injection_config
+
+    def setup_and_inject_single_config(
+        self,
+        pi_config: dict,
+        editor,
+        user_goal_idx: int,
+        injection_format: str,
+        task_id: int,
+    ):
+        """
+        For multi-docker mode: run setup, instantiate injection text, and inject into one worker.
+        Returns (task_dict, attacker_task_dict).
+        The injector must be constructed with only the editor for this worker so that
+        self.domain_map carries the correct worker URL.
+        """
+        MAX_NUM_RETRIES = 3
+
+        # 1. Environment setup
+        if pi_config.get("setup_fn"):
+            setup_fn_name = pi_config["setup_fn"]
+            for attempt in range(MAX_NUM_RETRIES):
+                try:
+                    setup_fn = SETUP_ACTION_NAME_TO_FUNCTION[setup_fn_name]
+                    updates = setup_fn(editor, **pi_config["parameters"])
+                    pi_config["parameters"].update(updates)
+                    break
+                except Exception as e:
+                    if attempt + 1 == MAX_NUM_RETRIES:
+                        raise WebArenaEditorException(
+                            f"Setup attempts exhausted: {e}. Terminating..."
+                        )
+                    print(f"Error during setup: {e}. Attempting to setup again: {attempt + 1}")
+                    time.sleep(2)
+
+        # 2. Instantiate injection text (mirrors _prepare_injection for one config)
+        params_dict = dict(self.domain_map)
+        params_dict.update(pi_config["parameters"])
+
+        instantiated_url_of_action = pi_config["action_url"].format(**params_dict)
+        pi_config["parameters"]["instantiated_action_url"] = instantiated_url_of_action
+
+        instantiated_instruction_text = pi_config["instruction"].format(**params_dict)
+        if "url_injection" in injection_format:
+            instantiated_instruction_text = instantiated_instruction_text.replace(" ", "-")
+
+        user_goal_str = self._get_user_goal_str(pi_config, user_goal_idx)
+        prompt_injection_msg = PromptInjectionFormat.MESSAGE[injection_format]
+        pi_config["instantiated_instruction"] = prompt_injection_msg.format(
+            user_goal_str=user_goal_str,
+            instantiated_url_of_action=instantiated_url_of_action,
+            instantiated_instruction_text=instantiated_instruction_text,
+        )
+
+        # 3. Inject into the worker environment and return task dicts
+        if isinstance(editor, GitlabEditor):
+            return self._inject_single_gitlab_config(pi_config, editor, user_goal_idx, task_id)
+        elif isinstance(editor, RedditEditor):
+            return self._inject_single_reddit_config(pi_config, editor, user_goal_idx, task_id)
+        else:
+            raise NotImplementedError(f"Unknown editor type: {type(editor)}")
+
+    def _inject_single_gitlab_config(self, pi_config, gitlab_editor, user_goal_idx, task_id):
+        with gitlab_editor:
+            self._create_attacker_account_or_login(gitlab_editor)
+            issue_url = gitlab_editor.create_issue_with_title_and_text(
+                "byteblaze",
+                "dotfiles",
+                "A note from a gentleman thief",
+                pi_config["instantiated_instruction"],
+            )
+        user_goal = GitlabUserGoals(issue_url)
+        return self._create_task_dicts(user_goal, user_goal_idx, task_id, issue_url, pi_config)
+
+    def _inject_single_reddit_config(self, pi_config, reddit_editor, user_goal_idx, task_id):
+        with reddit_editor:
+            attacker_username = pi_config["parameters"]["attacker_username"]
+            attacker_password = pi_config["parameters"]["attacker_password"]
+            reddit_editor.create_user("", "", attacker_username, "", attacker_password)
+            issue_url = reddit_editor.create_post_with_title_and_text(
+                "allentown",
+                "A note from a gentleman thief " + str(task_id),
+                pi_config["instantiated_instruction"],
+                attacker_username,
+            )
+            if "user_username" in pi_config["parameters"]:
+                user_username = pi_config["parameters"]["user_username"]
+                user_password = pi_config["parameters"]["user_password"]
+                reddit_editor.login(user_username, user_password)
+                if "user_post_title" in pi_config["parameters"]:
+                    pi_config["parameters"]["user_post_url"] = (
+                        reddit_editor.create_post_with_title_and_text(
+                            pi_config["parameters"]["user_post_forum"],
+                            pi_config["parameters"]["user_post_title"],
+                            pi_config["parameters"]["user_post_text"],
+                            user_username,
+                        )
+                    )
+                elif "user_msg_txt" in pi_config["parameters"]:
+                    pi_config["parameters"]["user_msg_url"] = reddit_editor.send_message(
+                        pi_config["parameters"]["user_msg_recipient"],
+                        pi_config["parameters"]["user_msg_txt"],
+                    )
+                elif "username_to_block" in pi_config["parameters"]:
+                    reddit_editor.block_user(user_username, pi_config["parameters"]["username_to_block"])
+
+        user_goal = RedditUserGoals(issue_url)
+        return self._create_task_dicts(user_goal, user_goal_idx, task_id, issue_url, pi_config)
+
 
 @click.command()
 @click.option(
@@ -730,13 +978,19 @@ class WebArenaPromptInjector:
     "--output-format",
     type=str,
     default="webarena",
-    help="Agentic scaffolding to use. Options: webarena (default), gpt_web_tools, claude, pte, beyond_browsing.",
+    help="Agentic scaffolding to use. Options: webarena (default), gpt_web_tools, claude, pte, beyond_browsing, react_api_web.",
 )
 @click.option(
     "--skip-environment",
     is_flag=True,
     default=False,
     help="Whether to do a dry run and skip injecting into the environment (for testing purposes). Default is False.",
+)
+@click.option(
+    "--multi-docker",
+    is_flag=True,
+    default=False,
+    help="Generate a parallel run_agent.sh that uses the multi-docker worker pool (pte and beyond_browsing formats only).",
 )
 def main(
     config,
@@ -750,6 +1004,7 @@ def main(
     output_dir,
     output_format,
     skip_environment,
+    multi_docker,
 ):
     only_environment = (only_environment or "all").lower()
 
@@ -797,6 +1052,7 @@ def main(
             system_prompt=system_prompt,
             user_goal_idx=user_goal_idx,
             model=model,
+            multi_docker=multi_docker,
         )
     )
 

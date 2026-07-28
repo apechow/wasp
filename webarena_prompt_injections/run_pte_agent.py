@@ -3,7 +3,8 @@
 Wrapper that runs one WASP task through the PTE agent and writes a
 gpt_web_tools-compatible JSONL trace for the WASP evaluators.
 
-Called once per task by the generated run_agent.sh script.
+Called once per task by the generated run_agent.sh script (single-docker mode).
+In multi-docker mode, run_task_multi_docker.py calls _run_task_with_servers directly.
 """
 
 import asyncio
@@ -63,31 +64,20 @@ def _build_jsonl_lines(intent: str, plan, outputs: dict) -> list:
     return lines
 
 
-@click.command()
-@click.option("--task-config", required=True, help="Path to WASP task JSON file")
-@click.option("--trace-log-dir", required=True, help="Directory to write {task_id}.jsonl trace")
-@click.option("--pte-dir", required=True, help="Path to the PTE project root")
-def main(task_config, trace_log_dir, pte_dir):
-    # Add PTE to the import path
-    sys.path.insert(0, str(pte_dir))
-    from agent.agent import Agent  # noqa: E402 — imported after path setup
-
-    with open(task_config) as f:
-        task = json.load(f)
-
-    start_url: str = task["start_url"]
-    intent: str = task["intent"]
-    task_id: int = task["task_id"]
-
-    # Derive the GitLab host from start_url so _inject_base_urls can append /api/v4
-    parsed = urlparse(start_url)
-    gitlab_host = f"{parsed.scheme}://{parsed.netloc}"
+async def _run_task_with_servers(
+    task_id: int,
+    intent: str,
+    start_url: str,
+    gitlab_host: str,
+    pte_dir: str,
+    trace_log_dir: str,
+):
+    from agent.agent import Agent
 
     servers = {
-        "gitlab": gitlab_host,              # execution agent appends /api/v4 (swagger basePath)
-        "reddit": "http://127.0.0.1:7791",  # PTE Playwright API server (not the Postmill site)
+        "gitlab": gitlab_host,
+        "reddit": "http://127.0.0.1:7791",
     }
-
     agent = Agent(
         env_file=os.path.join(pte_dir, "config", ".server_env"),
         api_dir=os.path.join(pte_dir, "api"),
@@ -97,10 +87,10 @@ def main(task_config, trace_log_dir, pte_dir):
     print(f"[run_pte_agent] Running task: {intent[:80]!r}", flush=True)
 
     try:
-        result = asyncio.run(agent.run_task(
+        result = await agent.run_task(
             f"Go to {start_url} and {intent}",
             servers=servers,
-        ))
+        )
         print(f"[run_pte_agent] Task complete.", flush=True)
         plan = agent.last_plan_response
         outputs = result.outputs
@@ -118,6 +108,26 @@ def main(task_config, trace_log_dir, pte_dir):
             f.write(json.dumps(line) + "\n")
 
     print(f"[run_pte_agent] Task {task_id}: wrote {len(lines) - 1} steps to {out_path}", flush=True)
+
+
+@click.command()
+@click.option("--task-config", required=True, help="Path to WASP task JSON file")
+@click.option("--trace-log-dir", required=True, help="Directory to write {task_id}.jsonl trace")
+@click.option("--pte-dir", required=True, help="Path to the PTE project root")
+def main(task_config, trace_log_dir, pte_dir):
+    sys.path.insert(0, str(pte_dir))
+
+    with open(task_config) as f:
+        task = json.load(f)
+
+    start_url: str = task["start_url"]
+    intent: str = task["intent"]
+    task_id: int = task["task_id"]
+
+    parsed = urlparse(start_url)
+    gitlab_host = f"{parsed.scheme}://{parsed.netloc}"
+
+    asyncio.run(_run_task_with_servers(task_id, intent, start_url, gitlab_host, pte_dir, trace_log_dir))
 
 
 if __name__ == "__main__":

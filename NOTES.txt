@@ -47,6 +47,56 @@ python run.py \
   --output-format pte
 
 
+=====================================
+Run commands for WASP + Beyond Browsing agent
+=====================================
+
+Agent location: wasp/../BeyondBrowsing/API-Based-Agent/
+Model/API key: configured in BeyondBrowsing/API-Based-Agent/config.toml
+Prerequisite: Docker must be running (Beyond Browsing uses a Docker sandbox)
+
+--- ONE TASK (single GitLab task, one user goal, one injection format) ---
+
+bash scripts/run_end_to_end.sh \
+  /tmp/bb-e2e-test/ \
+  gpt-4o \
+  configs/system_prompts/wa_p_som_cot_id_actree_3s.json \
+  configs/experiment_config_single.json \
+  0 \
+  goal_hijacking_plain_text \
+  beyond_browsing
+
+--- GITLAB one of each type (4) ---
+python3 run.py \
+  --config configs/experiment_config_single.json \
+  --output-dir /tmp/bb-gitlab-results--singlepertype \
+  --output-format beyond_browsing
+
+
+--- GITLAB ONLY (12 tasks x 2 user goals x 2 injection formats = 48 total runs) ---
+
+python3 run.py \
+  --config configs/experiment_config_gitlab.json \
+  --output-dir /tmp/bb-gitlab-results \
+  --output-format beyond_browsing
+
+
+--- REDDIT ONLY (9 tasks x 2 user goals x 2 injection formats = 36 total runs) ---
+
+python run.py \
+  --config configs/experiment_config_reddit.json \
+  --output-dir /tmp/bb-reddit-results \
+  --output-format beyond_browsing
+
+
+--- FULL RUN (all 21 tasks x 2 user goals x 2 injection formats = 84 total runs) ---
+
+python run.py \
+  --config configs/experiment_config.raw.json \
+  --output-dir /tmp/bb-full-results \
+  --output-format beyond_browsing
+
+
 --- CONFIG FILES ---
 
 configs/experiment_config_single.json   — 1 GitLab task (no setup_fn, deploy key)
@@ -65,6 +115,59 @@ goal_hijacking_url_injection  — injection embedded in a URL on the page
 
 0 — Comment on the given issue/post saying we are working on it / had similar experience
 1 — Add thumbs_up reaction to the given issue / Upvote the given post
+
+
+=====================================
+Run commands for WASP + ReactAPIWeb agent
+=====================================
+
+Agent location: wasp/../PTE/react_agent/
+Model/API key: configured in PTE/config/config.yaml
+IMPORTANT: Must use PTE venv Python — the wasp venv is missing PTE dependencies (e.g. dotenv).
+  PTE_PYTHON=/Users/annabella/Downloads/AIAgent/project/PTE/venv/bin/python
+
+--- ONE TASK (direct invocation, quickest way to verify it works) ---
+
+/Users/annabella/Downloads/AIAgent/project/PTE/venv/bin/python run_react_api_web_agent.py \
+  --task-config 0/webarena_tasks/1000.json \
+  --trace-log-dir /tmp/react-test/ \
+  --pte-dir /Users/annabella/Downloads/AIAgent/project/PTE \
+  --max-iterations 5
+
+--- ONE TASK via end-to-end script ---
+
+bash scripts/run_end_to_end.sh \
+  /tmp/react-e2e-test/ \
+  gpt-4o \
+  configs/system_prompts/wa_p_som_cot_id_actree_3s.json \
+  configs/experiment_config_single.json \
+  0 \
+  goal_hijacking_plain_text \
+  react_api_web
+
+
+--- GITLAB ONLY (12 tasks x 2 user goals x 2 injection formats = 48 total runs) ---
+
+/Users/annabella/Downloads/AIAgent/project/PTE/venv/bin/python run.py \
+  --config configs/experiment_config_gitlab.json \
+  --output-dir /Users/annabella/Downloads/AIAgent/project/wasp/react-gitlab-results \
+  --output-format react_api_web
+
+
+--- REDDIT ONLY (9 tasks x 2 user goals x 2 injection formats = 36 total runs) ---
+
+/Users/annabella/Downloads/AIAgent/project/PTE/venv/bin/python run.py \
+  --config configs/experiment_config_reddit.json \
+  --output-dir /tmp/react-reddit-results \
+  --output-format react_api_web
+
+
+--- FULL RUN (all 21 tasks x 2 user goals x 2 injection formats = 84 total runs) ---
+
+/Users/annabella/Downloads/AIAgent/project/PTE/venv/bin/python3 run.py \
+  --config configs/experiment_config.raw.json \
+  --output-dir /react-full-results \
+  --output-format react_api_web
 
 
 --- ONE-TIME SETUP (run once per machine) ---

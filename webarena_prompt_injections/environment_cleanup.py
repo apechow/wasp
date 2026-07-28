@@ -384,6 +384,17 @@ CLEANUP_ACTION_NAME_TO_FUNCTION = {
     show_default=True,
     help="Maximum number of retries for cleanup actions.",
 )
+@click.option(
+    "--multi-docker",
+    is_flag=True,
+    default=False,
+    help="Force-restart all multi-docker workers whose IDs are stored in --worker-ids-dir.",
+)
+@click.option(
+    "--worker-ids-dir",
+    default=None,
+    help="Directory containing <task_id>.txt files with worker IDs to force-restart (used with --multi-docker).",
+)
 def cleanup(
     gitlab_domain,
     reddit_domain,
@@ -392,6 +403,8 @@ def cleanup(
     skip_delete_gitlab_issues,
     delete_attacker_account,
     max_num_retries,
+    multi_docker,
+    worker_ids_dir,
 ):
     if gitlab_domain == "none":  # try to get it from env var
         gitlab_domain = os.environ.get("GITLAB")
@@ -469,6 +482,60 @@ def cleanup(
             gitlab_editor, "arsenelupin", "notaverycommonlyusedpassword"
         )
         print("Done deleting the attacker's account.")
+
+    if multi_docker and worker_ids_dir and os.path.isdir(worker_ids_dir):
+        _release_multi_docker_workers(worker_ids_dir)
+
+
+def _release_multi_docker_workers(worker_ids_dir: str) -> None:
+    """Force-restart all workers recorded by run_pte_agent.py / run_beyond_browsing_agent.py."""
+    import glob
+    import sys
+
+    worker_id_files = sorted(glob.glob(os.path.join(worker_ids_dir, "*.txt")))
+    if not worker_id_files:
+        print(f"[multi-docker cleanup] No worker ID files found in {worker_ids_dir}, nothing to release.")
+        return
+
+    print(f"[multi-docker cleanup] Releasing {len(worker_id_files)} workers with force_restart=True...")
+
+    # Try PTE's release function first; fall back to BeyondBrowsing's if PTE isn't available.
+    release_worker = None
+    wasp_dir = os.path.dirname(os.path.abspath(__file__))
+    pte_dir = os.path.abspath(os.path.join(wasp_dir, "..", "PTE"))
+    bb_eval_dir = os.path.abspath(
+        os.path.join(wasp_dir, "..", "BeyondBrowsing", "API-Based-Agent", "evaluation", "webarena")
+    )
+
+    if os.path.isdir(pte_dir):
+        sys.path.insert(0, pte_dir)
+        try:
+            from eval.docker.workers_new import release_worker as _pte_release
+            release_worker = lambda wid: _pte_release(wid, force_restart=True)
+            print("[multi-docker cleanup] Using PTE release_worker.")
+        except ImportError:
+            pass
+
+    if release_worker is None and os.path.isdir(bb_eval_dir):
+        sys.path.insert(0, bb_eval_dir)
+        try:
+            from worker_pool.workers import release_worker as _bb_release
+            release_worker = lambda wid: _bb_release(wid, force_restart=True)
+            print("[multi-docker cleanup] Using BeyondBrowsing release_worker.")
+        except ImportError:
+            pass
+
+    if release_worker is None:
+        print("[multi-docker cleanup] WARNING: could not import release_worker from PTE or BeyondBrowsing. Skipping worker release.")
+        return
+
+    for f in worker_id_files:
+        try:
+            worker_id = int(open(f).read().strip())
+            release_worker(worker_id)
+            print(f"[multi-docker cleanup] Released worker {worker_id} (from {os.path.basename(f)})")
+        except Exception as e:
+            print(f"[multi-docker cleanup] Failed to release worker from {f}: {e}")
 
 
 if __name__ == "__main__":

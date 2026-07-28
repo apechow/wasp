@@ -3,7 +3,8 @@
 Wrapper that runs one WASP task through the Beyond Browsing (OpenDevin CodeAct)
 agent and writes a gpt_web_tools-compatible JSONL trace for the WASP evaluators.
 
-Called once per task by the generated run_agent.sh script.
+Called once per task by the generated run_agent.sh script (single-docker mode).
+In multi-docker mode, run_task_multi_docker.py handles the full lifecycle.
 """
 
 import asyncio
@@ -74,7 +75,8 @@ def _build_jsonl_lines(intent: str, history: list) -> list:
 @click.command()
 @click.option("--task-config", required=True, help="Path to WASP task JSON file")
 @click.option("--trace-log-dir", required=True, help="Directory to write {task_id}.jsonl trace")
-@click.option("--beyond-browsing-dir", required=True, help="Path to the Beyond Browsing project root (API-Based-Agent/)")
+@click.option("--beyond-browsing-dir", required=True,
+              help="Path to the Beyond Browsing project root (API-Based-Agent/)")
 def main(task_config, trace_log_dir, beyond_browsing_dir):
     sys.path.insert(0, str(beyond_browsing_dir))
     from opendevin.core.main import main as bb_main  # noqa: E402
@@ -87,7 +89,6 @@ def main(task_config, trace_log_dir, beyond_browsing_dir):
     task_id: int = task["task_id"]
 
     task_str = f"Go to {start_url} and {intent}"
-    print(f"[run_beyond_browsing_agent] Running task {task_id}: {task_str[:80]!r}", flush=True)
 
     try:
         state = asyncio.run(bb_main(

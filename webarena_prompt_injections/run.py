@@ -20,6 +20,7 @@ def run_single_end_to_end(
         injection_format,  # prompt injection format to try
         results_dict,  # to save and accumulate results
         output_dir_idx=0,  # to save logs for each run separately
+        multi_docker=False,  # use multi-docker worker pool
     ):
     if output_dir[-1] == '/':
         output_dir = output_dir + str(output_dir_idx) + '/'
@@ -35,7 +36,8 @@ def run_single_end_to_end(
         config,
         str(user_goal_idx),
         injection_format,
-        output_format
+        output_format,
+        '--multi-docker' if multi_docker else '',
     ]
     print(f"\nRunning command: \n{' '.join([str(arg) for arg in command])}", flush=True)
     
@@ -73,13 +75,14 @@ def run_single_end_to_end(
     # -------
 
 
-def run_all(config, 
-            model, 
-            system_prompt, 
-            output_dir, 
-            output_format, 
+def run_all(config,
+            model,
+            system_prompt,
+            output_dir,
+            output_format,
             run_single,
-            user_goal_start):
+            user_goal_start,
+            multi_docker=False):
     gitlab_user_goals = GitlabUserGoals("")
     reddit_user_goals = RedditUserGoals("")
     assert len(gitlab_user_goals.GOALS) == len(reddit_user_goals.GOALS), "Number of user goals should match!"
@@ -96,14 +99,15 @@ def run_all(config,
             print(f"$$$$$$$ Running {i+1} out of {len(injection_format_list)} injection formats, current one: {injection_format}")
 
             run_single_end_to_end(config=config,
-                                  model=model, 
-                                  system_prompt=system_prompt, 
-                                  output_dir=output_dir, 
-                                  output_format=output_format, 
-                                  user_goal_idx=user_goal_idx, 
-                                  injection_format=injection_format, 
+                                  model=model,
+                                  system_prompt=system_prompt,
+                                  output_dir=output_dir,
+                                  output_format=output_format,
+                                  user_goal_idx=user_goal_idx,
+                                  injection_format=injection_format,
                                   results_dict=results_dict,
-                                  output_dir_idx=user_goal_idx * len(injection_format_list) + i)
+                                  output_dir_idx=user_goal_idx * len(injection_format_list) + i,
+                                  multi_docker=multi_docker)
 
             print(f"\nAccumulated results after user_goal_idx = {user_goal_idx+1} and injection_format_idx = {i+1}: ")
             for key, value in results_dict.items():
@@ -161,21 +165,29 @@ def run_all(config,
     default=0,
     help="starting user_goal index (between 0 and total number of benign user goals)",
 )
-def main(config, 
-         model, 
-         system_prompt, 
-         output_dir, 
-         output_format, 
-         run_single, 
-         user_goal_start):
+@click.option(
+    "--multi-docker",
+    is_flag=True,
+    default=False,
+    help="Use the multi-docker worker pool for parallel task execution (pte and beyond_browsing formats only)",
+)
+def main(config,
+         model,
+         system_prompt,
+         output_dir,
+         output_format,
+         run_single,
+         user_goal_start,
+         multi_docker):
     print("Arguments provided to run.py: \n", locals(), "\n\n")
-    run_all(config=config, 
-            model=model, 
-            system_prompt=system_prompt, 
-            output_dir=output_dir, 
-            output_format=output_format, 
+    run_all(config=config,
+            model=model,
+            system_prompt=system_prompt,
+            output_dir=output_dir,
+            output_format=output_format,
             run_single=run_single,
-            user_goal_start=user_goal_start)
+            user_goal_start=user_goal_start,
+            multi_docker=multi_docker)
 
 
 if __name__ == '__main__':
