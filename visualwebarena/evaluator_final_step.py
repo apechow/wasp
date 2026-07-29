@@ -25,7 +25,12 @@ from evaluation_harness import evaluator_list
     type=str,
     default="webarena",
     help="the format of the logs: webarena (default), claude, gpt_web_tools")
-def run_eval(log_folder, task_folder, format):
+@click.option(
+    "--output-file",
+    type=str,
+    default=None,
+    help="path to write results JSON; if omitted, falls back to exfil-flag heuristic")
+def run_eval(log_folder, task_folder, format, output_file):
 
     total_scores = 0.
     cnt_tasks = 0.
@@ -71,12 +76,10 @@ def run_eval(log_folder, task_folder, format):
     print("\nTotal scores: {score} / out of: {total}".format(score=total_scores, total=cnt_tasks))
 
     data_to_save = {"total_scores": total_scores, "cnt_tasks": cnt_tasks}
-    if exfil_flag:
-        with open("/tmp/run_attacker_utility.json", 'w') as json_file:
-            json.dump(data_to_save, json_file, indent=4)
-    else:
-        with open("/tmp/run_user_utility.json", 'w') as json_file:
-            json.dump(data_to_save, json_file, indent=4)
+    if output_file is None:
+        output_file = "/tmp/run_attacker_utility.json" if exfil_flag else "/tmp/run_user_utility.json"
+    with open(output_file, 'w') as json_file:
+        json.dump(data_to_save, json_file, indent=4)
 
 
 if __name__ == '__main__':

@@ -86,7 +86,7 @@ echo "SCRIPT_DIR: $SCRIPT_DIR"
 AGENT_RUN_SCRIPT="${OUTPUT_DIR}run_agent.sh"
 echo "step 2 | Executing agent script at $AGENT_RUN_SCRIPT"
 chmod -R 777 $OUTPUT_DIR
-if [ "$OUTPUT_FORMAT" = "pte" ] || [ "$OUTPUT_FORMAT" = "beyond_browsing" ] || [ "$OUTPUT_FORMAT" = "react_api_web" ]; then
+if [ "$OUTPUT_FORMAT" = "pte" ] || [ "$OUTPUT_FORMAT" = "beyond_browsing" ] || [ "$OUTPUT_FORMAT" = "react_api_web" ] || [ "$OUTPUT_FORMAT" = "claude_code" ]; then
     bash "$AGENT_RUN_SCRIPT"
 else
     cd $SCRIPT_DIR/../../visualwebarena/
@@ -109,7 +109,7 @@ echo "step 3 | OUTPUT_FORMAT: $OUTPUT_FORMAT"
 
 # Map pte/beyond_browsing formats to gpt_web_tools for evaluators (same JSONL format)
 EVAL_FORMAT=$OUTPUT_FORMAT
-if [ "$OUTPUT_FORMAT" = "pte" ] || [ "$OUTPUT_FORMAT" = "beyond_browsing" ] || [ "$OUTPUT_FORMAT" = "react_api_web" ]; then
+if [ "$OUTPUT_FORMAT" = "pte" ] || [ "$OUTPUT_FORMAT" = "beyond_browsing" ] || [ "$OUTPUT_FORMAT" = "react_api_web" ] || [ "$OUTPUT_FORMAT" = "claude_code" ]; then
     EVAL_FORMAT="gpt_web_tools"
 fi
 

@@ -22,6 +22,7 @@ class OutputFormat(str, Enum):
     PTE = "pte"
     BEYOND_BROWSING = "beyond_browsing"
     REACT_API_WEB = "react_api_web"
+    CLAUDE_CODE = "claude_code"
 
 
 class GitlabUserGoals:
@@ -343,6 +344,21 @@ REACT_API_WEB_BASH_SCRIPT_SINGLE_RUN_TEMPLATE = """
 echo "Running ReactAPIWeb Agent Task ID {task_id}"
 
 {pte_python} {run_react_api_web_agent_path} \\
+    --task-config "{task_config_path}" \\
+    --trace-log-dir "{trace_log_dir}" \\
+    --pte-dir "{pte_dir}"
+"""
+
+CLAUDE_CODE_BASH_SCRIPT_PREAMBLE = """#!/bin/bash
+
+set -e
+
+"""
+
+CLAUDE_CODE_BASH_SCRIPT_SINGLE_RUN_TEMPLATE = """
+echo "Running Claude Code Agent Task ID {task_id}"
+
+{pte_python} {run_claude_code_agent_path} \\
     --task-config "{task_config_path}" \\
     --trace-log-dir "{trace_log_dir}" \\
     --pte-dir "{pte_dir}"

@@ -41,6 +41,8 @@ from constants import (
     BEYOND_BROWSING_BASH_SCRIPT_POSTAMBLE_PARALLEL,
     REACT_API_WEB_BASH_SCRIPT_PREAMBLE,
     REACT_API_WEB_BASH_SCRIPT_SINGLE_RUN_TEMPLATE,
+    CLAUDE_CODE_BASH_SCRIPT_PREAMBLE,
+    CLAUDE_CODE_BASH_SCRIPT_SINGLE_RUN_TEMPLATE,
     STARTING_DUMMY_WEBARENA_TASK_INDEX,
     WEBARENA_GITLAB_TASK,
     WEBARENA_REDDIT_TASK,
@@ -155,6 +157,11 @@ class WebArenaPromptInjector:
 
             case OutputFormat.REACT_API_WEB:
                 content_of_script_to_run_agent = self._prep_react_api_web_agent_script(
+                    webarena_tasks_config, output_dir
+                )
+
+            case OutputFormat.CLAUDE_CODE:
+                content_of_script_to_run_agent = self._prep_claude_code_agent_script(
                     webarena_tasks_config, output_dir
                 )
 
@@ -388,6 +395,29 @@ class WebArenaPromptInjector:
                 task_id=task["task_id"],
                 pte_python=pte_python,
                 run_react_api_web_agent_path=run_react_api_web_agent_path,
+                task_config_path=task_config_path,
+                trace_log_dir=trace_log_dir,
+                pte_dir=pte_dir,
+            )
+        return script
+
+    def _prep_claude_code_agent_script(self, webarena_tasks_config, output_dir):
+        trace_log_dir = mkdir_in_output_folder_and_return_absolute_path(
+            output_dir, "agent_logs"
+        )
+        pte_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "PTE"))
+        pte_python = os.path.join(pte_dir, "venv/bin/python")
+        run_claude_code_agent_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "run_claude_code_agent.py"
+        )
+
+        script = CLAUDE_CODE_BASH_SCRIPT_PREAMBLE
+        for task in webarena_tasks_config:
+            task_config_path = os.path.join(output_dir, f"webarena_tasks/{task['task_id']}.json")
+            script += CLAUDE_CODE_BASH_SCRIPT_SINGLE_RUN_TEMPLATE.format(
+                task_id=task["task_id"],
+                pte_python=pte_python,
+                run_claude_code_agent_path=run_claude_code_agent_path,
                 task_config_path=task_config_path,
                 trace_log_dir=trace_log_dir,
                 pte_dir=pte_dir,
@@ -978,7 +1008,7 @@ class WebArenaPromptInjector:
     "--output-format",
     type=str,
     default="webarena",
-    help="Agentic scaffolding to use. Options: webarena (default), gpt_web_tools, claude, pte, beyond_browsing, react_api_web.",
+    help="Agentic scaffolding to use. Options: webarena (default), gpt_web_tools, claude, pte, beyond_browsing, react_api_web, claude_code.",
 )
 @click.option(
     "--skip-environment",
@@ -1026,7 +1056,10 @@ def main(
             f"No custom system_prompt support for {output_format}, setting it to empty."
         )
         system_prompt = ""
-    elif "claude" in model.lower():
+    elif "claude" in model.lower() and output_format != "claude_code":
+        # The claude_code scaffolding (PTE codegen agent) sources its own model
+        # from PTE/config/config.yaml and takes no system-prompt JSON, so it must
+        # not be swept into the computer-use "claude" agent by a claude-* model id.
         output_format = "claude"
         with open(system_prompt, "r") as claude_agent_config_file:
             claude_agent_configs = json.load(claude_agent_config_file)

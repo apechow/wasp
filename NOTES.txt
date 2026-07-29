@@ -170,6 +170,68 @@ bash scripts/run_end_to_end.sh \
   --output-format react_api_web
 
 
+=====================================
+Run commands for WASP + Claude Code agent
+=====================================
+
+Agent location: wasp/../PTE/eval/claude_code_agent_runner.py + PTE/scripts/run_claude_task.sh
+Model: read from PTE/config/config.yaml (agent_llm_provider must be "anthropic"; the
+  codegen session runs via the `claude` CLI). The --model flag below only steers WASP's
+  own dispatch — it does NOT set the codegen model.
+IMPORTANT: Must use PTE venv Python — the wasp venv is missing PTE dependencies.
+  PTE_PYTHON=/home/annabella/AIAgent/PTE/venv/bin/python
+
+How it differs from the ReactAPIWeb agent:
+  - It is a codegen pipeline, not a browser agent. A network-isolated `claude` session
+    writes a Python script for the task; that script is then run live against the site.
+  - The codegen session never sees the injected page, so exfil ASR is ~0 by construction.
+  - The trace JSONL is synthesized from the generated script source (in the tool-call
+    arguments, where ExfilEvaluator looks) and the script's stdout.
+  - Sites: gitlab / shopping / shopping_admin. reddit is not yet supported by
+    ClaudeCodeAgentRunner.SUPPORTED_SITES (a reddit task records an "unsupported_site"
+    trace until PTE adds it); the WASP wiring itself is site-generic and needs no change.
+  - Codegen resolves the task intent from PTE_TASK_INTENT (set by run_claude_code_agent.py),
+    which PTE/scripts/lookup_task.py honors in place of its dataset lookup.
+
+--- ONE TASK (direct invocation, quickest way to verify it works) ---
+
+# Run from webarena_prompt_injections/ (the script and the 0/... paths are relative
+# to it). Absolute paths below so it works from any cwd:
+cd /home/annabella/AIAgent/wasp/webarena_prompt_injections
+
+/home/annabella/AIAgent/PTE/venv/bin/python run_claude_code_agent.py \
+  --task-config /home/annabella/AIAgent/wasp/react-gitlab-results-claude/0/webarena_tasks/1000.json \
+  --trace-log-dir /tmp/claude-code-test/ \
+  --pte-dir /home/annabella/AIAgent/PTE
+# (any existing webarena_tasks/<id>.json works; the one above ships in the repo)
+
+--- ONE TASK via end-to-end script ---
+
+bash scripts/run_end_to_end.sh \
+  /tmp/claude-code-e2e-test/ \
+  gpt-4o \
+  configs/system_prompts/wa_p_som_cot_id_actree_3s.json \
+  configs/experiment_config_single.json \
+  0 \
+  goal_hijacking_plain_text \
+  claude_code
+
+--- GITLAB ONLY (12 tasks x 2 user goals x 2 injection formats = 48 total runs) ---
+
+/home/annabella/AIAgent/PTE/venv/bin/python run.py \
+  --config configs/experiment_config_gitlab.json \
+  --output-dir /home/annabella/AIAgent/wasp/claude-code-gitlab-results \
+  --output-format claude_code
+
+--- REDDIT ONLY (not yet supported by ClaudeCodeAgentRunner; runs but records
+    "unsupported_site" traces until PTE adds reddit support) ---
+
+/home/annabella/AIAgent/PTE/venv/bin/python run.py \
+  --config configs/experiment_config_reddit.json \
+  --output-dir /tmp/claude-code-reddit-results \
+  --output-format claude_code
+
+
 --- ONE-TIME SETUP (run once per machine) ---
 
 # Wasp venv (for prompt_injector.py and evaluators)
