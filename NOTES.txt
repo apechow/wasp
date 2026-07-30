@@ -192,6 +192,16 @@ How it differs from the ReactAPIWeb agent:
     trace until PTE adds it); the WASP wiring itself is site-generic and needs no change.
   - Codegen resolves the task intent from PTE_TASK_INTENT (set by run_claude_code_agent.py),
     which PTE/scripts/lookup_task.py honors in place of its dataset lookup.
+  - Replan/retry (--max-attempts, default 3, mirrors PTE's pytest harness): a failed live
+    script run (failure_kind=script_execution) is retried in replan mode — the codegen
+    session reads the failed script's own python_output.log and repairs it; a failed
+    codegen (failure_kind=codegen) is retried as a fresh regenerate. A task that produced
+    an answer is never retried (WASP grades separately; retrying would only fit the grader).
+    --max-attempts 1 disables retries (old single-shot behavior). NOTE: a hard config error
+    still burns all attempts — e.g. agent_llm_provider != "anthropic" fails the provider
+    gate in run_claude_task.sh on every attempt; retries only recover transient/script fails.
+    The batch path below (run.py) does not thread this flag, so full runs use the default 3;
+    to change it, edit CLAUDE_CODE_BASH_SCRIPT_SINGLE_RUN_TEMPLATE in constants.py.
 
 --- ONE TASK (direct invocation, quickest way to verify it works) ---
 
@@ -202,8 +212,10 @@ cd /home/annabella/AIAgent/wasp/webarena_prompt_injections
 /home/annabella/AIAgent/PTE/venv/bin/python run_claude_code_agent.py \
   --task-config /home/annabella/AIAgent/wasp/react-gitlab-results-claude/0/webarena_tasks/1000.json \
   --trace-log-dir /tmp/claude-code-test/ \
-  --pte-dir /home/annabella/AIAgent/PTE
+  --pte-dir /home/annabella/AIAgent/PTE \
+  --max-attempts 3
 # (any existing webarena_tasks/<id>.json works; the one above ships in the repo)
+# --max-attempts is optional (defaults to 3); pass --max-attempts 1 for the old single shot.
 
 --- ONE TASK via end-to-end script ---
 

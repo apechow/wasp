@@ -122,7 +122,9 @@ def _build_steps(pte_dir: str, task_id: int, result: dict) -> list:
 @click.option("--pte-dir", required=True, help="Path to the PTE project root")
 @click.option("--codegen-timeout", default=900, show_default=True, help="Max seconds for the codegen session")
 @click.option("--script-timeout", default=120, show_default=True, help="Max seconds for the live script run")
-def main(task_config, trace_log_dir, pte_dir, codegen_timeout, script_timeout):
+@click.option("--max-attempts", default=3, show_default=True, help="Max codegen/execution attempts per task; a failed live run is retried in replan mode, a failed codegen is regenerated. 1 disables retries.")
+def main(task_config, trace_log_dir, pte_dir, codegen_timeout, script_timeout, max_attempts):
+    max_attempts = max(1, max_attempts)
     pte_dir = str(Path(pte_dir).resolve())
     sys.path.insert(0, pte_dir)
     from eval.claude_code_agent_runner import ClaudeCodeAgentRunner
@@ -184,13 +186,49 @@ def main(task_config, trace_log_dir, pte_dir, codegen_timeout, script_timeout):
         print(f"[run_claude_code_agent] Initializing agent (site={site})...", flush=True)
         await runner._init_agent()
         print(f"[run_claude_code_agent] Running task: {intent[:80]!r}", flush=True)
-        try:
-            result = await runner._run_task(task)
-            print(f"[run_claude_code_agent] Task complete.", flush=True)
-            return result or {}
-        except Exception as e:
-            print(f"[run_claude_code_agent] Task {task_id} failed: {e}", flush=True)
-            return {"success": False, "error": str(e), "failure_kind": "wrapper"}
+
+        # Attempt loop mirroring PTE's pytest harness
+        # (eval/tests/test_agent_verified_all_sites.py). The wrapper has no
+        # grader, so "done" means the runner produced an answer (no
+        # failure_kind). A script_execution failure is retried in replan mode
+        # (the runner reads the failed script's own python_output.log and
+        # repairs it); a codegen failure is retried as a fresh regenerate.
+        attempt = 1
+        result: dict = {}
+        while True:
+            # Set from the *previous* result: attempt 1 always runs fresh; a
+            # retry after a live-run failure replans, a retry after a codegen
+            # failure regenerates (replan=False).
+            runner.replan = attempt > 1 and result.get("failure_kind") == "script_execution"
+            runner.replan_attempt = attempt
+            runner.replan_max_attempts = max_attempts
+            try:
+                result = await runner._run_task(task) or {}
+            except Exception as e:
+                print(f"[run_claude_code_agent] Task {task_id} attempt {attempt} failed: {e}", flush=True)
+                result = {"success": False, "error": str(e), "failure_kind": "wrapper"}
+
+            failure_kind = result.get("failure_kind")
+            # Got an answer (no failure_kind) => done. Never retry a produced
+            # answer: WASP grades separately and retrying would only fit its
+            # grader.
+            if not failure_kind or attempt >= max_attempts:
+                break
+            # Only the runner's own retryable kinds are worth another attempt;
+            # unsupported_site and the wrapper `except` kind are terminal.
+            if failure_kind not in ("script_execution", "codegen"):
+                break
+
+            attempt += 1
+            if failure_kind == "script_execution":
+                print(f"[run_claude_code_agent] Task {task_id} attempt {attempt}/{max_attempts} "
+                      f"script failed ({result.get('error')}) — replanning from its logs", flush=True)
+            else:  # codegen
+                print(f"[run_claude_code_agent] Task {task_id} attempt {attempt}/{max_attempts} "
+                      f"codegen produced nothing ({result.get('error')}) — regenerating", flush=True)
+
+        print(f"[run_claude_code_agent] Task complete (attempts={attempt}).", flush=True)
+        return result
 
     result = asyncio.run(_run())
     steps = _build_steps(pte_dir, task_id, result)
