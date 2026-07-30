@@ -11,10 +11,47 @@ import asyncio
 import json
 import os
 import sys
+import traceback
 from pathlib import Path
 from urllib.parse import urlparse
 
 import click
+
+
+def _resolve_gitlab_token(base_url: str) -> str:
+    """Return a PAT that actually authenticates against base_url.
+
+    PTE's fallback chain (react_agent_runner.py) ends at config/.server_env,
+    whose token belongs to a different GitLab snapshot than the one WASP
+    provisions. That token 401s on every request, and the agent burns its
+    iteration budget rediscovering session-cookie auth instead of doing the
+    task — so verify the token here rather than trusting the chain.
+    """
+    import requests
+
+    def _works(tok: str) -> bool:
+        if not tok:
+            return False
+        try:
+            r = requests.get(
+                f"{base_url}/api/v4/user",
+                headers={"PRIVATE-TOKEN": tok},
+                timeout=10,
+            )
+            return r.status_code == 200
+        except Exception:
+            return False
+
+    tok = os.environ.get("GITLAB_TOKEN", "").strip()
+    if _works(tok):
+        return tok
+
+    from api.gitlab_pw.tokens import get_glpat  # PTE; needs sys.path set first
+
+    tok = get_glpat(base_url)
+    if not _works(tok):
+        raise RuntimeError(f"Minted GLPAT does not authenticate against {base_url}")
+    return tok
 
 
 def _build_jsonl_lines(intent: str, steps: list) -> list:
@@ -75,6 +112,14 @@ def main(task_config, trace_log_dir, pte_dir, max_iterations):
     parsed = urlparse(start_url)
     gitlab_url = f"{parsed.scheme}://{parsed.netloc}"
 
+    # Minted here, in the synchronous section: get_glpat uses sync Playwright,
+    # which cannot run inside the asyncio loop below. Raising aborts the batch
+    # (run_agent.sh uses `set -e`) — correct, since without a working token
+    # every task in it fails anyway.
+    gitlab_token = _resolve_gitlab_token(gitlab_url)
+    os.environ["GITLAB_TOKEN"] = gitlab_token
+    print(f"[run_react_api_web_agent] GitLab token OK for {gitlab_url}", flush=True)
+
     async def _run() -> list:
         runner = ReactAgentRunner(
             gitlab_base_url=gitlab_url,
@@ -82,6 +127,7 @@ def main(task_config, trace_log_dir, pte_dir, max_iterations):
         )
         runner.server = "gitlab"
         runner.base_url = gitlab_url
+        runner.glpat = gitlab_token
         print(f"[run_react_api_web_agent] Initializing agent...", flush=True)
         await runner._init_agent()
         print(f"[run_react_api_web_agent] Running task: {intent[:80]!r}", flush=True)
@@ -89,9 +135,12 @@ def main(task_config, trace_log_dir, pte_dir, max_iterations):
             result = await runner._run_task(task)
             print(f"[run_react_api_web_agent] Task complete.", flush=True)
             return result.get("execution_result", {}).get("steps", [])
-        except Exception as e:
-            print(f"[run_react_api_web_agent] Task {task_id} failed: {e}", flush=True)
-            return []
+        except Exception:
+            # Salvage the partial trace rather than writing an empty one that
+            # silently scores 0, and keep the batch going for the other tasks.
+            print(f"[run_react_api_web_agent] Task {task_id} crashed:", flush=True)
+            traceback.print_exc()
+            return list(getattr(runner, "_last_steps", []))
 
     steps = asyncio.run(_run())
     lines = _build_jsonl_lines(intent, steps)
