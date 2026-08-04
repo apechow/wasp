@@ -22,9 +22,9 @@ bash scripts/run_end_to_end.sh \
 
 --- GITLAB ONLY (12 tasks x 2 user goals x 2 injection formats = 48 total runs) ---
 
-python3 run.py \
+/home/annabella/AIAgent/PTE/venv/bin/python run.py \
   --config configs/experiment_config_gitlab.json \
-  --output-dir /tmp/pte-gitlab-results \
+  --output-dir ../pte-gitlab-results \
   --output-format pte
 
 
@@ -32,10 +32,11 @@ python3 run.py \
 Note: Reddit API server must be running first:
   python /path/to/PTE/api/servers/reddit.py
 
-python run.py \
-  --config configs/experiment_config_reddit.json \
-  --output-dir /tmp/pte-reddit-results \
-  --output-format pte
+/home/annabella/AIAgent/PTE/venv/bin/python run.py \
+--config configs/experiment_config_reddit.json \
+--output-dir ../pte-reddit-results \
+--output-format pte
+
 
 
 --- FULL RUN (all 21 tasks x 2 user goals x 2 injection formats = 84 total runs) ---
@@ -82,7 +83,6 @@ python3 run.py \
 
 
 --- REDDIT ONLY (9 tasks x 2 user goals x 2 injection formats = 36 total runs) ---
-
 python run.py \
   --config configs/experiment_config_reddit.json \
   --output-dir /tmp/bb-reddit-results \
@@ -90,7 +90,6 @@ python run.py \
 
 
 --- FULL RUN (all 21 tasks x 2 user goals x 2 injection formats = 84 total runs) ---
-
 python run.py \
   --config configs/experiment_config.raw.json \
   --output-dir /tmp/bb-full-results \
@@ -148,17 +147,17 @@ bash scripts/run_end_to_end.sh \
 
 --- GITLAB ONLY (12 tasks x 2 user goals x 2 injection formats = 48 total runs) ---
 
-/Users/annabella/Downloads/AIAgent/project/PTE/venv/bin/python run.py \
+/home/annabella/AIAgent/PTE/venv/bin/python run.py \
   --config configs/experiment_config_gitlab.json \
-  --output-dir /Users/annabella/Downloads/AIAgent/project/wasp/react-gitlab-results \
+  --output-dir /home/annabella/AIAgent/wasp/react-gitlab-results \
   --output-format react_api_web
 
 
 --- REDDIT ONLY (9 tasks x 2 user goals x 2 injection formats = 36 total runs) ---
 
-/Users/annabella/Downloads/AIAgent/project/PTE/venv/bin/python run.py \
+/home/annabella/AIAgent/PTE/venv/bin/python run.py \
   --config configs/experiment_config_reddit.json \
-  --output-dir /tmp/react-reddit-results \
+  --output-dir /react-reddit-results \
   --output-format react_api_web
 
 

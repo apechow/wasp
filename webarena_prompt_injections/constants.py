@@ -22,6 +22,7 @@ class OutputFormat(str, Enum):
     PTE = "pte"
     BEYOND_BROWSING = "beyond_browsing"
     REACT_API_WEB = "react_api_web"
+    REACT_WEB = "react_web"
     CLAUDE_CODE = "claude_code"
 
 
@@ -338,6 +339,23 @@ REACT_API_WEB_BASH_SCRIPT_PREAMBLE = """#!/bin/bash
 
 set -e
 
+# Resolve the GitLab token ONCE for the whole batch and export it, so every
+# per-task run inherits it (env fast-path) instead of re-minting a fresh PAT via
+# Playwright per task. Abort up front if no token can be resolved — a batch that
+# cannot authenticate is wasted compute — but never mid-batch (see per-task
+# `|| echo` below, which keeps one task's failure from killing the run).
+echo "[run_agent] Resolving GitLab token once for the batch..."
+set +e
+GITLAB_TOKEN="$( "{pte_python}" "{resolver_path}" --gitlab-url "{gitlab_base_url}" --pte-dir "{pte_dir}" )"
+RESOLVE_RC=$?
+set -e
+export GITLAB_TOKEN
+if [ $RESOLVE_RC -ne 0 ] || [ -z "$GITLAB_TOKEN" ]; then
+    echo "[run_agent] ERROR: could not resolve a GitLab token; aborting before any task." >&2
+    exit 1
+fi
+echo "[run_agent] GitLab token resolved once for the batch."
+
 """
 
 REACT_API_WEB_BASH_SCRIPT_SINGLE_RUN_TEMPLATE = """
@@ -346,7 +364,7 @@ echo "Running ReactAPIWeb Agent Task ID {task_id}"
 {pte_python} {run_react_api_web_agent_path} \\
     --task-config "{task_config_path}" \\
     --trace-log-dir "{trace_log_dir}" \\
-    --pte-dir "{pte_dir}"
+    --pte-dir "{pte_dir}" {web_only_flag} || echo "[run_agent] Task {task_id} exited non-zero (continuing)"
 """
 
 CLAUDE_CODE_BASH_SCRIPT_PREAMBLE = """#!/bin/bash

@@ -32,10 +32,20 @@ import asyncio
 import json
 import os
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
 import click
+
+
+def _write_meta(trace_log_dir: str, task_id: int, meta: dict) -> None:
+    """Persist per-task provenance next to the {task_id}.jsonl trace so a short/crashed
+    trace is distinguishable from a successful one and the run stays retraceable."""
+    Path(trace_log_dir).mkdir(parents=True, exist_ok=True)
+    with open(os.path.join(trace_log_dir, f"{task_id}.meta.json"), "w") as f:
+        json.dump(meta, f, indent=2)
 
 
 def _build_jsonl_lines(intent: str, steps: list) -> list:
@@ -171,6 +181,8 @@ def main(task_config, trace_log_dir, pte_dir, codegen_timeout, script_timeout, m
                       f"the generated script will fall back to self-minting", flush=True)
                 gitlab_token = ""
 
+    run_status = {"attempts": 0}
+
     async def _run() -> dict:
         runner = ClaudeCodeAgentRunner(
             gitlab_base_url=base_url,
@@ -228,9 +240,13 @@ def main(task_config, trace_log_dir, pte_dir, codegen_timeout, script_timeout, m
                       f"codegen produced nothing ({result.get('error')}) — regenerating", flush=True)
 
         print(f"[run_claude_code_agent] Task complete (attempts={attempt}).", flush=True)
+        run_status["attempts"] = attempt
         return result
 
+    started_at = datetime.now(timezone.utc).isoformat()
+    t0 = time.time()
     result = asyncio.run(_run())
+    duration_s = round(time.time() - t0, 3)
     steps = _build_steps(pte_dir, task_id, result)
     lines = _build_jsonl_lines(intent, steps)
 
@@ -239,6 +255,27 @@ def main(task_config, trace_log_dir, pte_dir, codegen_timeout, script_timeout, m
     with open(out_path, "w") as f:
         for line in lines:
             f.write(json.dumps(line) + "\n")
+
+    # A produced answer has no failure_kind; anything else (script_execution, codegen,
+    # wrapper, unsupported_site) means the agent did not complete cleanly.
+    failure_kind = result.get("failure_kind")
+    _write_meta(trace_log_dir, task_id, {
+        "task_id": task_id,
+        "agent": "ClaudeCodeAgent",
+        "intent": intent,
+        "start_url": start_url,
+        "site": site,
+        "num_steps": len(lines) - 1,
+        "attempts": run_status["attempts"],
+        "max_attempts": max_attempts,
+        "codegen_timeout": codegen_timeout,
+        "script_timeout": script_timeout,
+        "crashed": bool(failure_kind),
+        "failure_kind": failure_kind,
+        "exception": result.get("error"),
+        "started_at": started_at,
+        "duration_s": duration_s,
+    })
 
     print(f"[run_claude_code_agent] Task {task_id}: wrote {len(lines) - 1} steps to {out_path}", flush=True)
 

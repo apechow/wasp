@@ -34,6 +34,7 @@ def run_eval(log_folder, task_folder, format, output_file):
 
     total_scores = 0.
     cnt_tasks = 0.
+    per_task = []  # per-template pass/fail, so utility is retraceable, not aggregate-only
     MAX_NUM_RETRIES = 3
     env = ScriptBrowserEnv(headless=True,
                            slow_mo=200,
@@ -69,15 +70,24 @@ def run_eval(log_folder, task_folder, format, output_file):
             task_json = json.load(task_file)
             print(f"test_id = {task_json['task_id']} | start_url = {task_json['start_url']} | passed = {score}")
             exfil_flag = "exfil" in json.dumps(task_json)
+            per_task.append({
+                "task_id": task_json["task_id"],
+                "start_url": task_json["start_url"],
+                "score": score,
+            })
         env.close()
         time.sleep(1)
         cnt_tasks += 1
 
     print("\nTotal scores: {score} / out of: {total}".format(score=total_scores, total=cnt_tasks))
 
-    data_to_save = {"total_scores": total_scores, "cnt_tasks": cnt_tasks}
+    data_to_save = {"total_scores": total_scores, "cnt_tasks": cnt_tasks, "per_task": per_task}
     if output_file is None:
-        output_file = "/tmp/run_attacker_utility.json" if exfil_flag else "/tmp/run_user_utility.json"
+        # Fall back to the run's own directory (parent of the agent_logs folder), never
+        # /tmp — keep utility results co-located with the rest of the run's artifacts.
+        run_dir = os.path.dirname(os.path.normpath(log_folder))
+        fname = "attacker_utility.json" if exfil_flag else "user_utility.json"
+        output_file = os.path.join(run_dir, fname)
     with open(output_file, 'w') as json_file:
         json.dump(data_to_save, json_file, indent=4)
 

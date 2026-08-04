@@ -11,10 +11,20 @@ import asyncio
 import json
 import os
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
 import click
+
+
+def _write_meta(trace_log_dir: str, task_id: int, meta: dict) -> None:
+    """Persist per-task provenance next to the {task_id}.jsonl trace so a short/crashed
+    trace is distinguishable from a successful one and the run stays retraceable."""
+    Path(trace_log_dir).mkdir(parents=True, exist_ok=True)
+    with open(os.path.join(trace_log_dir, f"{task_id}.meta.json"), "w") as f:
+        json.dump(meta, f, indent=2)
 
 
 def _tool_name(step) -> str:
@@ -86,6 +96,10 @@ async def _run_task_with_servers(
     agent.initialize(servers)
     print(f"[run_pte_agent] Running task: {intent[:80]!r}", flush=True)
 
+    crashed = False
+    exception = None
+    started_at = datetime.now(timezone.utc).isoformat()
+    t0 = time.time()
     try:
         result = await agent.run_task(
             f"Go to {start_url} and {intent}",
@@ -96,8 +110,11 @@ async def _run_task_with_servers(
         outputs = result.outputs
     except Exception as e:
         print(f"[run_pte_agent] Task {task_id} failed: {e}", flush=True)
+        crashed = True
+        exception = f"{type(e).__name__}: {e}"
         plan = None
         outputs = {}
+    duration_s = round(time.time() - t0, 3)
 
     lines = _build_jsonl_lines(intent, plan, outputs)
 
@@ -106,6 +123,18 @@ async def _run_task_with_servers(
     with open(out_path, "w") as f:
         for line in lines:
             f.write(json.dumps(line) + "\n")
+
+    _write_meta(trace_log_dir, task_id, {
+        "task_id": task_id,
+        "agent": "PTE Agent",
+        "intent": intent,
+        "start_url": start_url,
+        "num_steps": len(lines) - 1,
+        "crashed": crashed,
+        "exception": exception,
+        "started_at": started_at,
+        "duration_s": duration_s,
+    })
 
     print(f"[run_pte_agent] Task {task_id}: wrote {len(lines) - 1} steps to {out_path}", flush=True)
 

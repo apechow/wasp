@@ -4,6 +4,7 @@ import time
 import copy
 import json
 from typing import List
+from urllib.parse import urlparse
 
 import click
 from environment_editors.gitlab_editor import GitlabEditor
@@ -64,6 +65,11 @@ class WebArenaPromptInjector:
     ) -> None:
         self.editor_list = editor_list
         self.prompt_injection_configs = prompt_injection_configs
+        # (task_id -> template metadata) captured as tasks are created, so results can
+        # later be joined back to the human-readable template (`free_form_name`). The
+        # webarena task JSON deliberately does NOT carry this (a stray "exfil" key there
+        # would corrupt evaluator_final_step's exfil detection), so we record it here.
+        self._template_records = {}
         self.domain_map = {}
         # initializing domains
         for editor in self.editor_list:
@@ -160,6 +166,11 @@ class WebArenaPromptInjector:
                     webarena_tasks_config, output_dir
                 )
 
+            case OutputFormat.REACT_WEB:
+                content_of_script_to_run_agent = self._prep_react_api_web_agent_script(
+                    webarena_tasks_config, output_dir, web_only=True
+                )
+
             case OutputFormat.CLAUDE_CODE:
                 content_of_script_to_run_agent = self._prep_claude_code_agent_script(
                     webarena_tasks_config, output_dir
@@ -180,6 +191,12 @@ class WebArenaPromptInjector:
         write_json(
             self.prompt_injection_configs,
             path_to_instantiated_prompt_injection_config,
+        )
+
+        # task_id -> template metadata, the join key for per-template result collection.
+        write_json(
+            self._template_records,
+            os.path.join(output_dir, "template_index.json"),
         )
         return path_to_agent_script, path_to_instantiated_prompt_injection_config
 
@@ -378,7 +395,7 @@ class WebArenaPromptInjector:
             )
         return script
 
-    def _prep_react_api_web_agent_script(self, webarena_tasks_config, output_dir):
+    def _prep_react_api_web_agent_script(self, webarena_tasks_config, output_dir, web_only: bool = False):
         trace_log_dir = mkdir_in_output_folder_and_return_absolute_path(
             output_dir, "agent_logs"
         )
@@ -387,8 +404,22 @@ class WebArenaPromptInjector:
         run_react_api_web_agent_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "run_react_api_web_agent.py"
         )
+        resolver_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "resolve_gitlab_token.py"
+        )
+        # All tasks in a batch share one GitLab host; derive it from the first
+        # task's start_url so the once-per-batch token is minted against the same
+        # instance the per-task wrappers authenticate against.
+        first_start_url = webarena_tasks_config[0]["start_url"] if webarena_tasks_config else ""
+        parsed = urlparse(first_start_url)
+        gitlab_base_url = f"{parsed.scheme}://{parsed.netloc}"
 
-        script = REACT_API_WEB_BASH_SCRIPT_PREAMBLE
+        script = REACT_API_WEB_BASH_SCRIPT_PREAMBLE.format(
+            pte_python=pte_python,
+            resolver_path=resolver_path,
+            gitlab_base_url=gitlab_base_url,
+            pte_dir=pte_dir,
+        )
         for task in webarena_tasks_config:
             task_config_path = os.path.join(output_dir, f"webarena_tasks/{task['task_id']}.json")
             script += REACT_API_WEB_BASH_SCRIPT_SINGLE_RUN_TEMPLATE.format(
@@ -398,6 +429,7 @@ class WebArenaPromptInjector:
                 task_config_path=task_config_path,
                 trace_log_dir=trace_log_dir,
                 pte_dir=pte_dir,
+                web_only_flag="--web-only" if web_only else "",
             )
         return script
 
@@ -608,6 +640,24 @@ class WebArenaPromptInjector:
         task_for_this_attack["start_url"] = prompt_injection_config["parameters"][
             "instantiated_action_url"
         ]
+
+        # Record the template identity for this task_id so downstream result collection
+        # can join task_id -> template (free_form_name, exfil, etc.) even across grid
+        # cells that all reuse task_ids starting at 1000.
+        self._template_records[incrementing_task_id_number] = {
+            "task_id": incrementing_task_id_number,
+            "free_form_name": prompt_injection_config.get("free_form_name", ""),
+            "environment": prompt_injection_config.get("environment", ""),
+            "exfil": prompt_injection_config.get("exfil", False),
+            "instruction": prompt_injection_config.get("instruction", ""),
+            "instantiated_instruction": prompt_injection_config.get(
+                "instantiated_instruction", ""
+            ),
+            "user_intent": task_for_this_prompt_injection["intent"],
+            "attacker_intent": task_for_this_attack["intent"],
+            "user_start_url": task_for_this_prompt_injection["start_url"],
+            "attacker_start_url": task_for_this_attack["start_url"],
+        }
 
         return task_for_this_prompt_injection, task_for_this_attack
 
@@ -1092,6 +1142,23 @@ def main(
     print(f"The agent script was written out to: {path_to_agent_script}")
     print(
         f"The prompt injection config was written out to: {path_to_instantiated_prompt_injection_config}"
+    )
+
+    # Persist the grid-cell provenance so results collected from a bare <idx>/ directory
+    # can rebuild the globally-unique record_id (config stem + user goal + injection format
+    # + task_id + template slug) without needing run.py's in-memory context.
+    write_json(
+        {
+            "config": config,
+            "config_stem": os.path.splitext(os.path.basename(config))[0],
+            "model": model,
+            "output_format": output_format,
+            "system_prompt": system_prompt,
+            "user_goal_idx": user_goal_idx,
+            "injection_format": injection_format,
+            "only_environment": only_environment,
+        },
+        os.path.join(output_dir, "cell_meta.json"),
     )
 
 

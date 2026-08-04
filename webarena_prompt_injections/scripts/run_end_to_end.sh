@@ -35,19 +35,15 @@ fi
 echo "Creating the new OUTPUT_DIR=${OUTPUT_DIR}"
 mkdir -p "$OUTPUT_DIR"
 
-# ----- cleanup after previous run
-if [ -f "/tmp/run_step_by_step_asr.json" ]; then
-  rm "/tmp/run_step_by_step_asr.json"
-fi
+# Normalize to an absolute path (with trailing slash) so later steps that `cd` into
+# sibling repos (e.g. visualwebarena for the final-step evaluator) still resolve the
+# per-run output directory correctly.
+OUTPUT_DIR="$(realpath "$OUTPUT_DIR")/"
+echo "Resolved OUTPUT_DIR=${OUTPUT_DIR}"
 
-if [ -f "/tmp/run_attacker_utility.json" ]; then
-  rm "/tmp/run_attacker_utility.json"
-fi
-
-if [ -f "/tmp/run_user_utility.json" ]; then
-  rm "/tmp/run_user_utility.json"
-fi
-# -----
+# Note: evaluators now write step-by-step ASR and attacker/user utility JSON directly
+# into OUTPUT_DIR (self-contained per run); nothing lands in /tmp, so there is no
+# cross-run /tmp state left to clean up here.
 
 echo "OUTPUT_DIR: $OUTPUT_DIR"
 echo "CONFIG_PATH: $CONFIG_PATH"
@@ -86,7 +82,7 @@ echo "SCRIPT_DIR: $SCRIPT_DIR"
 AGENT_RUN_SCRIPT="${OUTPUT_DIR}run_agent.sh"
 echo "step 2 | Executing agent script at $AGENT_RUN_SCRIPT"
 chmod -R 777 $OUTPUT_DIR
-if [ "$OUTPUT_FORMAT" = "pte" ] || [ "$OUTPUT_FORMAT" = "beyond_browsing" ] || [ "$OUTPUT_FORMAT" = "react_api_web" ] || [ "$OUTPUT_FORMAT" = "claude_code" ]; then
+if [ "$OUTPUT_FORMAT" = "pte" ] || [ "$OUTPUT_FORMAT" = "beyond_browsing" ] || [ "$OUTPUT_FORMAT" = "react_api_web" ] || [ "$OUTPUT_FORMAT" = "react_web" ] || [ "$OUTPUT_FORMAT" = "claude_code" ]; then
     bash "$AGENT_RUN_SCRIPT"
 else
     cd $SCRIPT_DIR/../../visualwebarena/
@@ -109,13 +105,13 @@ echo "step 3 | OUTPUT_FORMAT: $OUTPUT_FORMAT"
 
 # Map pte/beyond_browsing formats to gpt_web_tools for evaluators (same JSONL format)
 EVAL_FORMAT=$OUTPUT_FORMAT
-if [ "$OUTPUT_FORMAT" = "pte" ] || [ "$OUTPUT_FORMAT" = "beyond_browsing" ] || [ "$OUTPUT_FORMAT" = "react_api_web" ] || [ "$OUTPUT_FORMAT" = "claude_code" ]; then
+if [ "$OUTPUT_FORMAT" = "pte" ] || [ "$OUTPUT_FORMAT" = "beyond_browsing" ] || [ "$OUTPUT_FORMAT" = "react_api_web" ] || [ "$OUTPUT_FORMAT" = "react_web" ] || [ "$OUTPUT_FORMAT" = "claude_code" ]; then
     EVAL_FORMAT="gpt_web_tools"
 fi
 
-# first report ASR
+# first report ASR (also persists per-task verdicts into the sub-run dir)
 source venv/bin/activate
-python evaluator_step_by_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --format $EVAL_FORMAT
+python evaluator_step_by_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --attacker-task-folder $ATTACKER_TASK_DIR --format $EVAL_FORMAT --output-dir "$OUTPUT_DIR"
 echo "Done evaluating attack goals step-by-step, above score is ASR!"
 deactivate
 
@@ -123,13 +119,25 @@ deactivate
 cd ../visualwebarena/
 source venv/bin/activate
 bash prepare.sh
-# evaluate attacker task performance (i.e. if final goal of the attacker was achieved)
-python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $ATTACKER_TASK_DIR --format $EVAL_FORMAT --output-file /tmp/run_attacker_utility.json
+# evaluate attacker task performance (i.e. if final goal of the attacker was achieved).
+# Persist into the sub-run dir (not /tmp, which gets clobbered across grid cells) with a
+# per-task breakdown, so attacker/user utility is retraceable per template.
+python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $ATTACKER_TASK_DIR --format $EVAL_FORMAT --output-file "${OUTPUT_DIR}attacker_utility.json"
 echo "Done evaluating attacker goals, above score is ASR!"
 # evaluate user task performance
-python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --output-file /tmp/run_user_utility.json
+python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --output-file "${OUTPUT_DIR}user_utility.json"
 echo "Done evaluating user objectives!"
 deactivate
+
+##### STEP 3.5: Consolidate per-template results ######
+echo "step 3.5 | Consolidating per-template results for $OUTPUT_DIR"
+cd $SCRIPT_DIR/..
+source venv/bin/activate
+# Non-fatal: a consolidation hiccup must not skip Step 4 (environment cleanup). run.py
+# also runs collect_results itself, so the table is still produced when driven from there.
+python collect_results.py --run-dir "$OUTPUT_DIR" || echo "step 3.5 | WARNING: collect_results failed (continuing)"
+deactivate
+##### -----------
 # bash step3_run_evaluators.sh $OUTPUT_DIR $OUTPUT_FORMAT
 ##### -----------
 
