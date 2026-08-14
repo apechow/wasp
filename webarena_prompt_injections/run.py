@@ -281,7 +281,7 @@ def _write_run_summary(output_dir, results_dict, all_rows):
     "--output-format",
     type=str,
     default="webarena",
-    help="Format of the agentic scaffolding: webarena (default), claude, gpt_web_tools, pte, beyond_browsing, react_api_web, claude_code",
+    help="Format of the agentic scaffolding: webarena (default), claude, gpt_web_tools, pte, beyond_browsing, react_api_web, claude_code, antigravity, ucm_agent, codex",
 )
 @click.option(
     "--run-single",

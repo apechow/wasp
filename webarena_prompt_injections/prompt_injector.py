@@ -44,6 +44,12 @@ from constants import (
     REACT_API_WEB_BASH_SCRIPT_SINGLE_RUN_TEMPLATE,
     CLAUDE_CODE_BASH_SCRIPT_PREAMBLE,
     CLAUDE_CODE_BASH_SCRIPT_SINGLE_RUN_TEMPLATE,
+    ANTIGRAVITY_BASH_SCRIPT_PREAMBLE,
+    ANTIGRAVITY_BASH_SCRIPT_SINGLE_RUN_TEMPLATE,
+    UCM_BASH_SCRIPT_PREAMBLE,
+    UCM_BASH_SCRIPT_SINGLE_RUN_TEMPLATE,
+    CODEX_BASH_SCRIPT_PREAMBLE,
+    CODEX_BASH_SCRIPT_SINGLE_RUN_TEMPLATE,
     STARTING_DUMMY_WEBARENA_TASK_INDEX,
     WEBARENA_GITLAB_TASK,
     WEBARENA_REDDIT_TASK,
@@ -173,6 +179,21 @@ class WebArenaPromptInjector:
 
             case OutputFormat.CLAUDE_CODE:
                 content_of_script_to_run_agent = self._prep_claude_code_agent_script(
+                    webarena_tasks_config, output_dir
+                )
+
+            case OutputFormat.ANTIGRAVITY:
+                content_of_script_to_run_agent = self._prep_antigravity_agent_script(
+                    webarena_tasks_config, output_dir
+                )
+
+            case OutputFormat.UCM_AGENT:
+                content_of_script_to_run_agent = self._prep_ucm_agent_script(
+                    webarena_tasks_config, output_dir
+                )
+
+            case OutputFormat.CODEX:
+                content_of_script_to_run_agent = self._prep_codex_agent_script(
                     webarena_tasks_config, output_dir
                 )
 
@@ -407,19 +428,28 @@ class WebArenaPromptInjector:
         resolver_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "resolve_gitlab_token.py"
         )
-        # All tasks in a batch share one GitLab host; derive it from the first
-        # task's start_url so the once-per-batch token is minted against the same
-        # instance the per-task wrappers authenticate against.
-        first_start_url = webarena_tasks_config[0]["start_url"] if webarena_tasks_config else ""
-        parsed = urlparse(first_start_url)
-        gitlab_base_url = f"{parsed.scheme}://{parsed.netloc}"
-
-        script = REACT_API_WEB_BASH_SCRIPT_PREAMBLE.format(
-            pte_python=pte_python,
-            resolver_path=resolver_path,
-            gitlab_base_url=gitlab_base_url,
-            pte_dir=pte_dir,
+        # Only react_api_web GitLab tasks need a batch PAT. Find the first gitlab
+        # task (if any) and mint the once-per-batch token against ITS host — not
+        # blindly against webarena_tasks_config[0], which for a reddit batch is the
+        # Reddit server and makes the Playwright GitLab login abort the whole run.
+        # Reddit-only batches get no preamble, so they never try a GitLab login.
+        gitlab_task = next(
+            (t for t in webarena_tasks_config if "gitlab" in t.get("sites", [])), None
         )
+        if gitlab_task is not None:
+            parsed = urlparse(gitlab_task["start_url"])
+            gitlab_base_url = f"{parsed.scheme}://{parsed.netloc}"
+            script = REACT_API_WEB_BASH_SCRIPT_PREAMBLE.format(
+                pte_python=pte_python,
+                resolver_path=resolver_path,
+                gitlab_base_url=gitlab_base_url,
+                pte_dir=pte_dir,
+            )
+        else:
+            # No gitlab task in this batch — supply the shebang + `set -e` header
+            # that REACT_API_WEB_BASH_SCRIPT_PREAMBLE would otherwise provide (the
+            # single-run template has none).
+            script = "#!/bin/bash\n\nset -e\n\n"
         for task in webarena_tasks_config:
             task_config_path = os.path.join(output_dir, f"webarena_tasks/{task['task_id']}.json")
             script += REACT_API_WEB_BASH_SCRIPT_SINGLE_RUN_TEMPLATE.format(
@@ -450,6 +480,75 @@ class WebArenaPromptInjector:
                 task_id=task["task_id"],
                 pte_python=pte_python,
                 run_claude_code_agent_path=run_claude_code_agent_path,
+                task_config_path=task_config_path,
+                trace_log_dir=trace_log_dir,
+                pte_dir=pte_dir,
+            )
+        return script
+
+    def _prep_antigravity_agent_script(self, webarena_tasks_config, output_dir):
+        trace_log_dir = mkdir_in_output_folder_and_return_absolute_path(
+            output_dir, "agent_logs"
+        )
+        pte_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "PTE"))
+        pte_python = os.path.join(pte_dir, "venv/bin/python")
+        run_antigravity_agent_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "run_antigravity_agent.py"
+        )
+
+        script = ANTIGRAVITY_BASH_SCRIPT_PREAMBLE
+        for task in webarena_tasks_config:
+            task_config_path = os.path.join(output_dir, f"webarena_tasks/{task['task_id']}.json")
+            script += ANTIGRAVITY_BASH_SCRIPT_SINGLE_RUN_TEMPLATE.format(
+                task_id=task["task_id"],
+                pte_python=pte_python,
+                run_antigravity_agent_path=run_antigravity_agent_path,
+                task_config_path=task_config_path,
+                trace_log_dir=trace_log_dir,
+                pte_dir=pte_dir,
+            )
+        return script
+
+    def _prep_codex_agent_script(self, webarena_tasks_config, output_dir):
+        trace_log_dir = mkdir_in_output_folder_and_return_absolute_path(
+            output_dir, "agent_logs"
+        )
+        pte_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "PTE"))
+        pte_python = os.path.join(pte_dir, "venv/bin/python")
+        run_codex_agent_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "run_codex_agent.py"
+        )
+
+        script = CODEX_BASH_SCRIPT_PREAMBLE
+        for task in webarena_tasks_config:
+            task_config_path = os.path.join(output_dir, f"webarena_tasks/{task['task_id']}.json")
+            script += CODEX_BASH_SCRIPT_SINGLE_RUN_TEMPLATE.format(
+                task_id=task["task_id"],
+                pte_python=pte_python,
+                run_codex_agent_path=run_codex_agent_path,
+                task_config_path=task_config_path,
+                trace_log_dir=trace_log_dir,
+                pte_dir=pte_dir,
+            )
+        return script
+
+    def _prep_ucm_agent_script(self, webarena_tasks_config, output_dir):
+        trace_log_dir = mkdir_in_output_folder_and_return_absolute_path(
+            output_dir, "agent_logs"
+        )
+        pte_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "PTE"))
+        pte_python = os.path.join(pte_dir, "venv/bin/python")
+        run_ucm_agent_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "run_ucm_agent.py"
+        )
+
+        script = UCM_BASH_SCRIPT_PREAMBLE
+        for task in webarena_tasks_config:
+            task_config_path = os.path.join(output_dir, f"webarena_tasks/{task['task_id']}.json")
+            script += UCM_BASH_SCRIPT_SINGLE_RUN_TEMPLATE.format(
+                task_id=task["task_id"],
+                pte_python=pte_python,
+                run_ucm_agent_path=run_ucm_agent_path,
                 task_config_path=task_config_path,
                 trace_log_dir=trace_log_dir,
                 pte_dir=pte_dir,
@@ -1058,7 +1157,7 @@ class WebArenaPromptInjector:
     "--output-format",
     type=str,
     default="webarena",
-    help="Agentic scaffolding to use. Options: webarena (default), gpt_web_tools, claude, pte, beyond_browsing, react_api_web, claude_code.",
+    help="Agentic scaffolding to use. Options: webarena (default), gpt_web_tools, claude, pte, beyond_browsing, react_api_web, claude_code, antigravity, ucm_agent, codex.",
 )
 @click.option(
     "--skip-environment",
@@ -1106,10 +1205,11 @@ def main(
             f"No custom system_prompt support for {output_format}, setting it to empty."
         )
         system_prompt = ""
-    elif "claude" in model.lower() and output_format != "claude_code":
-        # The claude_code scaffolding (PTE codegen agent) sources its own model
-        # from PTE/config/config.yaml and takes no system-prompt JSON, so it must
-        # not be swept into the computer-use "claude" agent by a claude-* model id.
+    elif "claude" in model.lower() and output_format not in ("claude_code", "antigravity", "ucm_agent", "codex"):
+        # The claude_code / antigravity / ucm_agent / codex scaffolding (PTE agents) source their
+        # own model from PTE (config.yaml, or the UCM Claude fallback) and take no
+        # system-prompt JSON, so they must not be swept into the computer-use "claude"
+        # agent by a claude-* model id.
         output_format = "claude"
         with open(system_prompt, "r") as claude_agent_config_file:
             claude_agent_configs = json.load(claude_agent_config_file)

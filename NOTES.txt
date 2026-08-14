@@ -169,6 +169,40 @@ bash scripts/run_end_to_end.sh \
   --output-format react_api_web
 
 
+--- REACT WEB-ONLY (--output-format react_web) ---
+
+# Browser-only variant of the ReactAPIWeb agent. Same wrapper
+# (run_react_api_web_agent.py), same PTE venv, same config.yaml model — it just
+# swaps PTE's ReactAgentRunner for WebAgentRunner (browser-only: NO API / Python /
+# bash channel; the agent can only drive the page via the browser). WebAgentRunner
+# is a drop-in subclass, so token resolution, trace writing, and meta.json are
+# identical; meta.json records "agent": "WebAgentRunner", "web_only": true.
+#
+# Wiring: OutputFormat.REACT_WEB (constants.py) -> _prep_react_api_web_agent_script
+# with web_only=True (prompt_injector.py) -> passes --web-only to the wrapper.
+# NOTE: run.py's --output-format help text lists react_api_web but omits react_web;
+# the value still works.
+
+# GITLAB ONLY (48 runs) — same as react_api_web, just change the format:
+/home/annabella/AIAgent/PTE/venv/bin/python run.py \
+  --config configs/experiment_config_gitlab.json \
+  --output-dir /home/annabella/AIAgent/wasp/react_web-gitlab-results \
+  --output-format react_web
+
+# Direct one-task invocation adds the --web-only flag to the wrapper:
+/home/annabella/AIAgent/PTE/venv/bin/python run_react_api_web_agent.py \
+  --task-config 0/webarena_tasks/1000.json \
+  --trace-log-dir /tmp/react-web-test/ \
+  --pte-dir /home/annabella/AIAgent/PTE \
+  --max-iterations 5 \
+  --web-only
+
+#full run
+/home/annabella/AIAgent/PTE/venv/bin/python run.py \
+  --config configs/experiment_config.raw.json \
+  --output-dir ../react-web-full-results \
+  --output-format react_web
+
 =====================================
 Run commands for WASP + Claude Code agent
 =====================================
@@ -234,13 +268,107 @@ bash scripts/run_end_to_end.sh \
   --output-dir /home/annabella/AIAgent/wasp/claude-code-gitlab-results \
   --output-format claude_code
 
---- REDDIT ONLY (not yet supported by ClaudeCodeAgentRunner; runs but records
-    "unsupported_site" traces until PTE adds reddit support) ---
+--- REDDIT ONLY (now supported; reddit is in ClaudeCodeAgentRunner.SUPPORTED_SITES) ---
+
+# reddit has no native API: generated scripts drive the companion reddit_extra
+# FastAPI server (api/servers/reddit.py, 127.0.0.1:7791), so that server must be
+# up (initialize.py starts it unless --no-reddit-extra). REDDIT_EXTRA_DOMAIN is
+# the primary API target; REDDIT_DOMAIN is the graded site. See the module
+# docstring in eval/claude_code_agent_runner.py.
 
 /home/annabella/AIAgent/PTE/venv/bin/python run.py \
   --config configs/experiment_config_reddit.json \
   --output-dir /tmp/claude-code-reddit-results \
   --output-format claude_code
+
+
+--- ANTIGRAVITY / GEMINI (--output-format antigravity) ---
+
+# Same PTE codegen pipeline as claude_code, but through the Antigravity "agy"
+# CLI (AntigravityAgentRunner -> scripts/run_antigravity_task.sh). Wasp wrapper:
+# webarena_prompt_injections/run_antigravity_agent.py.
+#
+# CONFIG GATE (required, and mutually exclusive with claude_code): run_antigravity_task.sh
+# hard-errors unless PTE config/config.yaml has
+#     agent_llm_provider: google       (or: antigravity)
+#     agent_llm_model:    <a name that `agy models` offers, e.g. gemini-3.5-flash-medium>
+# One config.yaml selects ONE provider at a time — claude_code needs `anthropic`,
+# antigravity needs `google`/`antigravity`, so flip the provider before switching.
+# No auto-flip; the wrapper leaves config.yaml alone.
+#
+# Prereqs: the `agy` binary on PATH and a signed-in Gemini profile at
+# ~/.gemini/antigravity-cli/antigravity-oauth-token (run `agy` once interactively
+# to sign in). Model provenance in the run summary comes from config.yaml
+# (resolve_effective_model), not the --model flag.
+
+/home/annabella/AIAgent/PTE/venv/bin/python run.py \
+  --config configs/experiment_config_gitlab.json \
+  --output-dir /home/annabella/AIAgent/wasp/antigravity-results-gitlab \
+  --output-format antigravity
+
+
+--- CODEX / OPENAI + DEEPSEEK (--output-format codex) ---
+
+# Same PTE codegen pipeline as claude_code / antigravity, but through the Codex
+# CLI (CodexAgentRunner -> scripts/run_codex_task.sh). Wasp wrapper:
+# webarena_prompt_injections/run_codex_agent.py.
+#
+# CONFIG GATE (required, mutually exclusive with claude_code/antigravity):
+# run_codex_task.sh hard-errors (exit 2) unless PTE config/config.yaml has an
+# OpenAI-compatible provider:
+#     agent_llm_provider: openai        (or: deepseek / openrouter)
+#     agent_llm_model:    <a model that provider offers>
+#       openai    -> e.g. gpt-5.6-luna         (base_url https://api.openai.com/v1)
+#       deepseek  -> e.g. deepseek-chat        (base_url https://api.deepseek.com)
+#       openrouter-> e.g. deepseek/deepseek-chat (base_url https://openrouter.ai/api/v1)
+# One config.yaml selects ONE provider at a time; flip it before switching, e.g.
+#     /home/annabella/AIAgent/PTE/venv/bin/python scripts/switch_model.py deepseek:deepseek-chat
+# No auto-flip; the wrapper leaves config.yaml alone.
+#
+# Prereqs: the `codex` binary on PATH and the matching API key in PTE config/.env
+#   openai -> OPENAI_API_KEY, deepseek -> DEEPSEEK_API_KEY, openrouter -> OPENROUTER_API_KEY
+# (the per-provider base_url is fixed inside run_codex_task.sh). Sites, replan/retry
+# (--max-attempts, default 3; also retries the sandbox_write_block failure kind),
+# PTE_TASK_INTENT resolution, and synthesized-trace behavior all match claude_code.
+# Model provenance in the run summary comes from config.yaml (resolve_effective_model),
+# not the --model flag.
+
+--- ONE TASK (direct invocation, quickest way to verify it works) ---
+
+cd /home/annabella/AIAgent/wasp/webarena_prompt_injections
+
+/home/annabella/AIAgent/PTE/venv/bin/python run_codex_agent.py \
+  --task-config /home/annabella/AIAgent/wasp/react-gitlab-results-claude/0/webarena_tasks/1000.json \
+  --trace-log-dir /tmp/codex-test/ \
+  --pte-dir /home/annabella/AIAgent/PTE \
+  --max-attempts 3
+
+--- ONE TASK via end-to-end script ---
+
+bash scripts/run_end_to_end.sh \
+  /tmp/codex-e2e-test/ \
+  gpt-4o \
+  configs/system_prompts/wa_p_som_cot_id_actree_3s.json \
+  configs/experiment_config_single.json \
+  0 \
+  goal_hijacking_plain_text \
+  codex
+
+--- GITLAB ONLY (12 tasks x 2 user goals x 2 injection formats = 48 total runs) ---
+
+/home/annabella/AIAgent/PTE/venv/bin/python run.py \
+  --config configs/experiment_config_gitlab.json \
+  --output-dir /home/annabella/AIAgent/wasp/codex-results-gitlab \
+  --output-format codex
+
+--- REDDIT ONLY (reddit is in CodexAgentRunner.SUPPORTED_SITES) ---
+
+# Same reddit_extra FastAPI prereq as claude_code (see that section).
+
+/home/annabella/AIAgent/PTE/venv/bin/python run.py \
+  --config configs/experiment_config_reddit.json \
+  --output-dir /home/annabella/AIAgent/wasp/codex-results-reddit \
+  --output-format codex
 
 
 --- ONE-TIME SETUP (run once per machine) ---

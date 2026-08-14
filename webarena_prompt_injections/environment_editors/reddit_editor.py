@@ -37,6 +37,36 @@ class RedditEditor(BaseWebArenaEditor):
         self.environment = "reddit"
         self.reddit_domain = reddit_domain
 
+    # Text that Postmill (and its proxy) render when the app isn't ready yet —
+    # typically a transient 500 on the /login?_cookie_check= redirect while the
+    # session store / DB is still warming up after a container restart.
+    _SERVER_ERROR_MARKERS = (
+        "500 Internal Server Error",
+        "502 Bad Gateway",
+        "503 Service Unavailable",
+    )
+
+    def _goto_when_ready(self, url: str, attempts: int = 10, backoff_ms: int = 3000):
+        """Navigate to ``url``, retrying while the server returns an error page.
+
+        A freshly (re)started Reddit instance briefly serves 500s before its
+        session store / DB are ready. Without this, the single ``goto`` +
+        ``wait_for_selector`` in login()/create_user() fails immediately and
+        crashes every Reddit task during setup. Retrying only on an *error page*
+        keeps the normal already-logged-in path (a 200 with no form) untouched.
+        """
+        for _ in range(attempts):
+            try:
+                self.page.goto(url, wait_until="networkidle")
+                body = self.page.content()
+            except Exception:
+                body = ""
+            if not any(marker in body for marker in self._SERVER_ERROR_MARKERS):
+                return  # page loaded without an obvious server error
+            self.page.wait_for_timeout(backoff_ms)
+        # Exhausted retries: leave the (error) page loaded so the caller's
+        # selector wait raises its usual, descriptive WebArenaEditorException.
+
     def login(self, username: str, password: str):
         """Log in to the Reddit instance using provided credentials.
 
@@ -44,7 +74,7 @@ class RedditEditor(BaseWebArenaEditor):
             username (str): The Reddit username.
             password (str): The Reddit password.
         """
-        self.page.goto(f"{self.reddit_domain}/login", wait_until="networkidle")
+        self._goto_when_ready(f"{self.reddit_domain}/login")
 
         self.page.set_viewport_size({"width": 1280, "height": 1500})
 
@@ -85,7 +115,7 @@ class RedditEditor(BaseWebArenaEditor):
             password (str): The new reddit password.
         """
         start_url = f"{self.reddit_domain}/registration"
-        self.page.goto(start_url, wait_until="networkidle")
+        self._goto_when_ready(start_url)
 
         self.page.set_viewport_size({"width": 1280, "height": 720})
 

@@ -24,6 +24,9 @@ class OutputFormat(str, Enum):
     REACT_API_WEB = "react_api_web"
     REACT_WEB = "react_web"
     CLAUDE_CODE = "claude_code"
+    ANTIGRAVITY = "antigravity"
+    UCM_AGENT = "ucm_agent"
+    CODEX = "codex"
 
 
 class GitlabUserGoals:
@@ -377,6 +380,63 @@ CLAUDE_CODE_BASH_SCRIPT_SINGLE_RUN_TEMPLATE = """
 echo "Running Claude Code Agent Task ID {task_id}"
 
 {pte_python} {run_claude_code_agent_path} \\
+    --task-config "{task_config_path}" \\
+    --trace-log-dir "{trace_log_dir}" \\
+    --pte-dir "{pte_dir}"
+"""
+
+# Antigravity (Gemini "agy" CLI) codegen agent — mirror of the Claude Code
+# templates above. Interpreter is still the PTE venv python: run_antigravity_agent.py
+# imports PTE's AntigravityAgentRunner, which shells out to run_antigravity_task.sh;
+# that script resolves the agy binary itself.
+ANTIGRAVITY_BASH_SCRIPT_PREAMBLE = """#!/bin/bash
+
+set -e
+
+"""
+
+ANTIGRAVITY_BASH_SCRIPT_SINGLE_RUN_TEMPLATE = """
+echo "Running Antigravity Agent Task ID {task_id}"
+
+{pte_python} {run_antigravity_agent_path} \\
+    --task-config "{task_config_path}" \\
+    --trace-log-dir "{trace_log_dir}" \\
+    --pte-dir "{pte_dir}"
+"""
+
+# UCM agent (PTE trusted computer-use agent: masking + quarantined LLM). Interpreter
+# is the PTE venv python: run_ucm_agent.py imports PTE's UcmAgentRunner and brings up
+# the UCM docker stack (nginx masking proxy + Firefox container) on the first task.
+UCM_BASH_SCRIPT_PREAMBLE = """#!/bin/bash
+
+set -e
+
+"""
+
+UCM_BASH_SCRIPT_SINGLE_RUN_TEMPLATE = """
+echo "Running UCM Agent Task ID {task_id}"
+
+{pte_python} {run_ucm_agent_path} \\
+    --task-config "{task_config_path}" \\
+    --trace-log-dir "{trace_log_dir}" \\
+    --pte-dir "{pte_dir}"
+"""
+
+# Codex (Codex CLI over OpenAI-compatible providers: openai / deepseek /
+# openrouter) codegen agent — mirror of the Claude Code / Antigravity templates
+# above. Interpreter is the PTE venv python: run_codex_agent.py imports PTE's
+# CodexAgentRunner, which shells out to run_codex_task.sh; that script resolves
+# the codex binary and the per-provider endpoint itself.
+CODEX_BASH_SCRIPT_PREAMBLE = """#!/bin/bash
+
+set -e
+
+"""
+
+CODEX_BASH_SCRIPT_SINGLE_RUN_TEMPLATE = """
+echo "Running Codex Agent Task ID {task_id}"
+
+{pte_python} {run_codex_agent_path} \\
     --task-config "{task_config_path}" \\
     --trace-log-dir "{trace_log_dir}" \\
     --pte-dir "{pte_dir}"

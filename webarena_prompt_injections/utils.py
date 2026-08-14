@@ -59,7 +59,7 @@ def write_json_with_task_ids_as_individual_files(
 # run the PTE ReAct/CodeAct scaffolding, which sources its model from PTE's
 # config/config.yaml (agent_llm_provider + agent_llm_model). Recording the --model
 # flag for these mislabels the run (e.g. a claude-sonnet-4-6 agent stamped "gpt-4o").
-_PTE_BACKED_FORMATS = frozenset({"react_api_web", "pte", "beyond_browsing", "claude_code"})
+_PTE_BACKED_FORMATS = frozenset({"react_api_web", "pte", "beyond_browsing", "claude_code", "antigravity", "codex"})
 
 
 def _default_pte_dir() -> str:

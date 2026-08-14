@@ -121,7 +121,7 @@ def main(task_config, trace_log_dir, pte_dir, max_iterations, web_only):
     # It is a drop-in subclass of ReactAgentRunner — same __init__ signature and same
     # server/base_url/glpat/_init_agent/_run_task interface — so nothing else changes.
     if web_only:
-        from web_agent.web_agent_runner import WebAgentRunner as _Runner
+        from web_agent_react.web_agent_runner import WebAgentRunner as _Runner
     else:
         from react_agent.react_agent_runner import ReactAgentRunner as _Runner
 
@@ -142,13 +142,22 @@ def main(task_config, trace_log_dir, pte_dir, max_iterations, web_only):
     # Fail open: a token failure here must never abort the batch — one task
     # scoring low is fine, killing the whole run is not. (get_glpat is still
     # attempted inside _resolve_gitlab_token as a per-task fallback.)
-    try:
-        gitlab_token = _resolve_gitlab_token(gitlab_url)
-        print(f"[run_react_api_web_agent] GitLab token OK for {gitlab_url}", flush=True)
-    except Exception:
-        print(f"[run_react_api_web_agent] Task {task_id}: token pre-flight failed; "
-              f"running fail-open (unauthenticated).", flush=True)
-        traceback.print_exc()
+    #
+    # Only gitlab tasks need a PAT: for a reddit task _resolve_gitlab_token would
+    # verify against the reddit host (no /api/v4/user → fail) and then drive a
+    # doomed Playwright GitLab login (~10s + noisy traceback) before failing open.
+    # The runner keys off task["sites"], so reddit tasks run fine with no token.
+    if "gitlab" in task.get("sites", []):
+        try:
+            gitlab_token = _resolve_gitlab_token(gitlab_url)
+            print(f"[run_react_api_web_agent] GitLab token OK for {gitlab_url}", flush=True)
+        except Exception:
+            print(f"[run_react_api_web_agent] Task {task_id}: token pre-flight failed; "
+                  f"running fail-open (unauthenticated).", flush=True)
+            traceback.print_exc()
+            gitlab_token = os.environ.get("GITLAB_TOKEN", "").strip()
+    else:
+        # Reddit (and any non-gitlab) task: no PAT needed.
         gitlab_token = os.environ.get("GITLAB_TOKEN", "").strip()
     os.environ["GITLAB_TOKEN"] = gitlab_token
 
